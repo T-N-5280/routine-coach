@@ -1,0 +1,11 @@
+{
+  "name": "tts-proxy",
+  "main": "azure-tts-proxy-worker.js",
+  "compatibility_date": "2026-08-01",
+  "kv_namespaces": [
+    {
+      "binding": "ROUTINES_KV",
+      "id": "97fb2c0a0d3646b1b159b0d56b7e052a"
+    }
+  ]
+}
