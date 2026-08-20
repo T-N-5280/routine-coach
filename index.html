@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>日常打卡助手</title>
+<style>
+  :root{
+    --bg:#faf9f6; --card:#ffffff; --ink:#1f1e1c; --sub:#6b6a66;
+    --line:#e7e5df; --accent:#3c3489; --accent-soft:#eeedfe;
+    --good:#0f6e56; --warn:#993c1d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:var(--bg); color:var(--ink); padding:24px 16px 60px;
+  }
+  .wrap{max-width:560px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px;}
+  .sub{color:var(--sub);font-size:14px;margin:0 0 20px;}
+  .localeswitch{
+    display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex-shrink:0;
+    background:var(--card);
+  }
+  .localebtn{
+    border:none;background:transparent;padding:6px 12px;font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;
+    white-space:nowrap;
+  }
+  .localebtn.on{background:var(--accent);color:#fff;}
+
+  .tabs{display:flex;gap:8px;margin-bottom:20px;}
+  .tab{
+    flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card);text-align:center;cursor:pointer;font-size:14px;font-weight:500;color:var(--sub);
+  }
+  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px;}
+
+  .runner-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .stepcount{font-size:13px;color:var(--sub);}
+  .stepname{font-size:24px;font-weight:500;margin:8px 0 4px;}
+  .stepdetail{font-size:14px;color:var(--sub);margin-bottom:18px;min-height:20px;}
+
+  .ring-wrap{display:flex;justify-content:center;margin:10px 0 20px;}
+  svg{transform:rotate(-90deg);}
+  .ring-bg{fill:none;stroke:var(--line);stroke-width:10;}
+  .ring-fg{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .3s linear;}
+  .ring-label{
+    position:absolute;font-size:34px;font-weight:500;
+  }
+  .ring-container{position:relative;width:180px;height:180px;display:flex;align-items:center;justify-content:center;}
+
+  .controls{display:flex;gap:10px;justify-content:center;margin-bottom:6px;}
+  button{
+    font-family:inherit;font-size:14px;font-weight:500;border-radius:10px;
+    border:1px solid var(--line);background:var(--card);padding:10px 16px;cursor:pointer;color:var(--ink);
+  }
+  button:active{transform:scale(0.97);}
+  .primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .ghost{background:transparent;}
+  .rowbtns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+
+  .off-course{
+    display:none;margin-top:16px;padding:14px;border-radius:10px;
+    background:#faece7;border:1px solid #f0997b;color:var(--warn);font-size:14px;text-align:center;
+  }
+  .off-course.show{display:block;}
+
+  .steplist{list-style:none;margin:0;padding:0;}
+  .steplist li{
+    display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);
+  }
+  .steplist li:last-child{border-bottom:none;}
+  .steplist input[type=text]{
+    flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;
+  }
+  .steplist input[type=number]{
+    width:64px;border:1px solid var(--line);border-radius:8px;padding:8px 6px;font-size:14px;font-family:inherit;text-align:center;
+  }
+  .steplist .unit{font-size:12px;color:var(--sub);}
+  .del{color:var(--warn);border-color:#f0997b;background:#fff;padding:6px 10px;font-size:13px;}
+  .addbtn{margin-top:10px;width:100%;}
+  .small{font-size:12px;color:var(--sub);}
+  .section-title{font-size:14px;font-weight:500;color:var(--sub);margin:0 0 10px;text-transform:uppercase;letter-spacing:.03em;}
+  .done-msg{text-align:center;padding:30px 10px;}
+  .done-msg .big{font-size:20px;font-weight:500;margin-bottom:6px;}
+  select{font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+  .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .steprow{display:flex;flex-direction:column;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .steprow:last-child{border-bottom:none;}
+  .steprow-top{display:flex;align-items:center;gap:10px;}
+  .daypicker{display:flex;gap:5px;flex-wrap:wrap;}
+  .daybtn{
+    width:30px;height:28px;border-radius:7px;border:1px solid var(--line);background:#fff;
+    font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .daybtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .todaybadge{font-size:11px;color:var(--accent);border:1px solid var(--accent-soft);background:var(--accent-soft);padding:2px 7px;border-radius:6px;}
+  .skipnote{font-size:12px;color:var(--sub);font-style:italic;}
+  .blockbuilder{border:1px dashed var(--line);border-radius:10px;padding:14px;margin-top:14px;}
+  .blocksub{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+  .blocksub input[type=text]{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;font-family:inherit;}
+  .blocksub input[type=number]{width:56px;border:1px solid var(--line);border-radius:8px;padding:7px 6px;font-size:13px;font-family:inherit;text-align:center;}
+  .habittype{display:flex;gap:6px;}
+  .typebtn{
+    font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--sub);cursor:pointer;
+  }
+  .typebtn.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:500;}
+  .seqbox{background:var(--bg);border-radius:10px;padding:10px;margin-top:2px;}
+  .seqtotal{font-size:12px;color:var(--sub);margin-top:4px;}
+  .substepname{font-size:13px;color:var(--sub);}
+  .reorderbtns{display:flex;flex-direction:column;gap:2px;}
+  .reorderbtns button{
+    padding:0;width:22px;height:16px;display:flex;align-items:center;justify-content:center;
+    background:transparent;border:none;cursor:pointer;
+  }
+  .reorderbtns button:disabled{opacity:0.25;cursor:default;}
+  .tri{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;}
+  .tri-up{border-bottom:7px solid var(--sub);}
+  .tri-down{border-top:7px solid var(--sub);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1 id="appTitle"></h1>
+      <p class="sub" id="appSub"></p>
+    </div>
+    <div class="localeswitch">
+      <button class="localebtn" id="localeBtnCN" onclick="setLocale('cn')"></button>
+      <button class="localebtn" id="localeBtnTW" onclick="setLocale('tw')"></button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-mode="morning" onclick="switchMode('morning')" id="tabMorning"></div>
+    <div class="tab" data-mode="night" onclick="switchMode('night')" id="tabNight"></div>
+  </div>
+
+  <div class="card" id="runnerCard">
+    <!-- runner UI injected here -->
+  </div>
+
+  <div class="card" id="editorCard">
+    <div class="toprow">
+      <p class="section-title" style="margin:0;" id="editTitle"></p>
+      <button class="ghost" onclick="toggleEditor()" id="editorToggleBtn"></button>
+    </div>
+    <div id="editorBody" style="display:none;"></div>
+  </div>
+
+  <div class="card" id="syncCard"></div>
+
+  <div class="card" id="importExportCard"></div>
+</div>
+
+<script>
+// ---------- i18n ----------
+// Two Chinese locales: 'cn' (Mainland, Simplified, PRC usage) and 'tw' (Taiwan, Traditional, Taiwan usage).
+// This isn't just a script conversion — word choice differs where real usage differs
+// (e.g. 拉伸/伸展, 早餐/早餐 same, 熄灯/關燈, 训练日/重訓日, 视频 not used here, etc).
+const STR = {
+  appTitle:      { cn:"日常打卡助手", tw:"日常提醒小幫手" },
+  appSub:        { cn:"语音引导、定时提醒，让你不走神。", tw:"語音引導、定時提醒，讓你不分心。" },
+  localeCN:      { cn:"简体中文", tw:"簡體中文" },
+  localeTW:      { cn:"繁体中文", tw:"繁體中文" },
+  tabMorning:    { cn:"早晨", tw:"早上" },
+  tabNight:      { cn:"夜晚", tw:"晚上" },
+  editTitle:     { cn:"编辑步骤", tw:"編輯步驟" },
+  edit:          { cn:"编辑", tw:"編輯" },
+  done:          { cn:"完成", tw:"完成" },
+  habitsToday:   { cn:"个习惯", tw:"個習慣" },
+  about:         { cn:"约", tw:"約" },
+  minutes:       { cn:"分钟", tw:"分鐘" },
+  skippedNote:   { cn:"今天根据日期设置跳过了", tw:"今天根據日期設定跳過了" },
+  habitsUnit:    { cn:"个习惯", tw:"個習慣" },
+  startRoutine:  { cn:"开始", tw:"開始" },
+  routineWord:   { cn:"日常", tw:"日常" },
+  routineDone:   { cn:"日常完成", tw:"日常完成" },
+  stayedOnTrack: { cn:"保持得很好，坚持住了。", tw:"表現得很好，堅持住了。" },
+  habitOf:       { cn:"第", tw:"第" },
+  habitOfMid:    { cn:"个习惯，共", tw:"個習慣，共" },
+  habitOfEnd:    { cn:"个", tw:"個" },
+  subStepOf:     { cn:"第", tw:"第" },
+  subStepOfMid:  { cn:"个子步骤，共", tw:"個子步驟，共" },
+  subStepOfEnd:  { cn:"个", tw:"個" },
+  back:          { cn:"上一步", tw:"上一步" },
+  pause:         { cn:"暂停", tw:"暫停" },
+  resume:        { cn:"继续", tw:"繼續" },
+  next:          { cn:"下一步", tw:"下一步" },
+  end:           { cn:"结束", tw:"結束" },
+  stayWithIt:    { cn:"坚持住 —— 你还在做", tw:"堅持住 —— 你還在做" },
+  habitNamePH:   { cn:"习惯名称", tw:"習慣名稱" },
+  remove:        { cn:"删除", tw:"刪除" },
+  type:          { cn:"类型", tw:"類型" },
+  singleTimer:   { cn:"单一计时", tw:"單一計時" },
+  sequence:      { cn:"引导序列", tw:"引導序列" },
+  duration:      { cn:"时长", tw:"時長" },
+  sec:           { cn:"秒", tw:"秒" },
+  minLabel:      { cn:"分", tw:"分" },
+  secLabel:      { cn:"秒", tw:"秒" },
+  voiceStartPH:  { cn:"开始时说的话（留空则说名称）", tw:"開始時說的話（留空則唸名稱）" },
+  midwayPH:      { cn:"中途提醒语（可选）", tw:"中途提醒語（可選）" },
+  onToday:       { cn:"今天进行", tw:"今天進行" },
+  offToday:      { cn:"今天跳过", tw:"今天跳過" },
+  addHabit:      { cn:"添加习惯", tw:"新增習慣" },
+  typeHelp:      { cn:"单一计时 = 一个倒计时。引导序列 = 应用会依次引导你完成多个带计时的动作（可含休息），作为一个整体习惯，例如拉伸组合。",
+                   tw:"單一計時 = 一個倒數計時。引導序列 = 應用程式會依序引導你完成多個帶計時的動作（可含休息），作為一個整體習慣，例如伸展組合。" },
+  subStepsOrder: { cn:"子步骤（按顺序）", tw:"子步驟（按順序）" },
+  subStepNamePH: { cn:"子步骤名称", tw:"子步驟名稱" },
+  subVoicePH:    { cn:"此子步骤的语音提示（留空则读名称）", tw:"此子步驟的語音提示（留空則唸名稱）" },
+  addSubStep:    { cn:"添加子步骤", tw:"新增子步驟" },
+  total:         { cn:"总计：约", tw:"總計：約" },
+  min:           { cn:"分钟", tw:"分鐘" },
+  newSubStep:    { cn:"新子步骤", tw:"新子步驟" },
+  newHabit:      { cn:"新习惯", tw:"新習慣" },
+  voiceComplete: { cn:"日常完成。做得很好。", tw:"日常完成，做得很好。" },
+  syncTitle:     { cn:"跨设备同步", tw:"跨裝置同步" },
+  syncDesc:      { cn:"设置一个同步码，在其他设备上输入相同的码，就能看到同样的习惯。", tw:"設定一個同步碼，在其他裝置上輸入相同的碼，就能看到同樣的習慣。" },
+  syncCodePH:    { cn:"输入或创建同步码", tw:"輸入或建立同步碼" },
+  syncSet:       { cn:"设置", tw:"設定" },
+  syncClear:     { cn:"清除", tw:"清除" },
+  syncing:       { cn:"同步中…", tw:"同步中…" },
+  synced:        { cn:"已同步 ✓", tw:"已同步 ✓" },
+  syncError:     { cn:"同步失败", tw:"同步失敗" },
+  syncActiveWith:{ cn:"当前同步码：", tw:"目前同步碼：" },
+  noHabitsYet:   { cn:"还没有添加习惯，点击下方「编辑」开始添加。", tw:"還沒有新增習慣，點擊下方「編輯」開始新增。" },
+  importExportTitle: { cn:"导入 / 导出", tw:"匯入 / 匯出" },
+  importExportDesc:  { cn:"粘贴数据以导入，或点击导出复制当前数据（用于备份）。", tw:"貼上資料以匯入，或點擊匯出複製目前資料（用於備份）。" },
+  importBtn:     { cn:"导入", tw:"匯入" },
+  exportBtn:     { cn:"导出", tw:"匯出" },
+  importSuccess: { cn:"导入成功！", tw:"匯入成功！" },
+  importFailed:  { cn:"导入失败，请检查粘贴的内容格式是否正确。", tw:"匯入失敗，請檢查貼上的內容格式是否正確。" },
+  voiceFirst:    { cn:"第一步", tw:"第一步" },
+  voicePaused:   { cn:"已暂停。", tw:"已暫停。" },
+  voiceResumed:  { cn:"继续。", tw:"繼續。" },
+  voiceEnded:    { cn:"日常已结束。", tw:"日常已結束。" },
+  voiceStillGoing:{ cn:"继续进行", tw:"繼續進行" }
+};
+function T(key){
+  const entry = STR[key];
+  if(!entry) return key;
+  return entry[state.locale] || entry.cn;
+}
+
+// days: [] or missing = every day. Otherwise array of 0(Sun)-6(Sat).
+// A step is either simple (has "seconds") or a sequence habit (has "subSteps": [{name,seconds,voice}]).
+// Two full example sets so the starter content also reflects regional wording
+// (e.g. 拉伸 vs 伸展 for "stretch", 熄灯 vs 關燈 for "lights out", 训练日 vs 重訓日).
+const DEFAULTS = {
+  cn: { morning: [], night: [] },
+  tw: { morning: [], night: [] }
+};
+
+const DAY_LABELS = { cn:['日','一','二','三','四','五','六'], tw:['日','一','二','三','四','五','六'] };
+const DAY_FULL = {
+  cn:['星期日','星期一','星期二','星期三','星期四','星期五','星期六'],
+  tw:['星期日','星期一','星期二','星期三','星期四','星期五','星期六']
+};
+
+function isSequence(step){ return !!(step.subSteps && step.subSteps.length); }
+
+// Friendly "X分Y秒" display next to raw-seconds duration inputs.
+function fmtMinSec(totalSeconds){
+  const m = Math.floor(totalSeconds/60);
+  const s = totalSeconds % 60;
+  if(m <= 0) return `${s}${T('secLabel')}`;
+  if(s <= 0) return `${m}${T('minLabel')}`;
+  return `${m}${T('minLabel')}${s}${T('secLabel')}`;
+}
+
+// total duration of a step, in seconds
+function stepDuration(step){
+  if(!isSequence(step)) return step.seconds||0;
+  return step.subSteps.reduce((a,m)=>a+m.seconds,0);
+}
+
+let state = {
+  locale: 'cn',
+  mode: 'morning',
+  routines: null,
+  running: false,
+  paused: false,
+  currentIndex: 0,
+  activeSteps: [],
+  remaining: 0,
+  timerId: null,
+  editing: false,
+  // sequence-habit sub-progress
+  subQueue: null,   // moves for current sequence habit, or null if simple step
+  subIndex: 0,
+  // cross-device cloud sync
+  syncCode: null,
+  syncStatus: 'idle' // 'idle' | 'syncing' | 'synced' | 'error'
+};
+
+// Persistence: localStorage, since this file runs as a standalone hosted
+// page (not inside the Claude artifact viewer, where window.storage would
+// have been used instead). Everything below keeps the same async-style
+// call sites as before so nothing else in the app had to change.
+const LS_PREFIX = "routineCoach:";
+async function lsGet(key){
+  const v = localStorage.getItem(LS_PREFIX + key);
+  return v === null ? null : { value: v };
+}
+async function lsSet(key, value){
+  localStorage.setItem(LS_PREFIX + key, value);
+  return { value };
+}
+
+async function loadLocale(){
+  try{
+    const r = await lsGet('locale');
+    if(r && (r.value==='cn' || r.value==='tw')) state.locale = r.value;
+  }catch(e){ /* default stays 'cn' */ }
+}
+async function saveLocale(){
+  try{ await lsSet('locale', state.locale); }catch(e){}
+}
+
+// ---------- Cross-device sync (Cloudflare KV via the same Worker proxy) ----------
+// A "sync code" is a shared key you set once and enter on every device. Any
+// device with the same code loads/saves the same routines. There's no
+// account system — the code itself is the only thing gating access, so
+// treat it like a light passphrase (don't reuse a real password) and keep
+// it private since anyone with the code can read/write your routines.
+async function loadSyncCode(){
+  try{
+    const r = await lsGet('syncCode');
+    if(r && r.value) state.syncCode = r.value;
+  }catch(e){}
+}
+async function saveSyncCodeLocally(){
+  try{ await lsSet('syncCode', state.syncCode || ''); }catch(e){}
+}
+
+async function pullFromCloud(){
+  if(!state.syncCode) return null;
+  try{
+    const res = await fetch(`${SYNC_LOAD_URL}?code=${encodeURIComponent(state.syncCode)}`);
+    if(!res.ok) throw new Error("sync load failed: " + res.status);
+    const json = await res.json();
+    return json.data || null;
+  }catch(e){
+    console.warn("[RoutineCoach] cloud pull failed —", e);
+    return null;
+  }
+}
+
+// Background refresh: pulls the latest cloud copy without requiring a manual
+// reload. Skipped while a routine is actively running (don't yank the run
+// screen mid-habit) or while the editor is open (don't disrupt mid-typing —
+// an incoming pull would rebuild the list and drop input focus, the same
+// bug fixed earlier for the duration fields). Only applies the pulled data
+// if it's actually different from what's already loaded, to avoid needless
+// re-renders.
+async function backgroundSyncCheck(){
+  if(!state.syncCode) return;
+  if(state.running || state.editing) return;
+  const cloudData = await pullFromCloud();
+  if(!cloudData) return;
+  if(cloudData === JSON.stringify(state.routines)) return; // already up to date
+  try{
+    state.routines = JSON.parse(cloudData);
+    migrateRoutines();
+    await lsSet('routines', cloudData);
+    renderRunner();
+    renderEditor();
+  }catch(e){}
+}
+
+async function pushToCloud(){
+  if(!state.syncCode) return;
+  state.syncStatus = 'syncing';
+  updateSyncBadge();
+  try{
+    const res = await fetch(SYNC_SAVE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: state.syncCode, data: JSON.stringify(state.routines) })
+    });
+    if(!res.ok) throw new Error("sync save failed: " + res.status);
+    state.syncStatus = 'synced';
+  }catch(e){
+    console.warn("[RoutineCoach] cloud push failed —", e);
+    state.syncStatus = 'error';
+  }
+  updateSyncBadge();
+}
+
+function updateSyncBadge(){
+  const el = document.getElementById('syncStatusBadge');
+  if(!el) return;
+  if(!state.syncCode){ el.textContent = ''; return; }
+  const labels = { idle:'', syncing: T('syncing'), synced: T('synced'), error: T('syncError') };
+  el.textContent = labels[state.syncStatus] || '';
+}
+
+async function loadRoutines(){
+  await loadSyncCode();
+
+  // If a sync code is set, prefer the cloud copy so every device converges
+  // on the same data. Fall back to the local copy, then to defaults.
+  if(state.syncCode){
+    const cloudData = await pullFromCloud();
+    if(cloudData){
+      try{
+        state.routines = JSON.parse(cloudData);
+        migrateRoutines();
+        await lsSet('routines', cloudData); // keep local cache in sync too
+        return;
+      }catch(e){ /* fall through to local/defaults below */ }
+    }
+  }
+
+  try{
+    const r = await lsGet('routines');
+    if(!r) throw new Error("no saved routines yet");
+    state.routines = JSON.parse(r.value);
+    migrateRoutines();
+    if(state.syncCode) pushToCloud(); // seed the cloud with what we have locally
+  }catch(e){
+    state.routines = JSON.parse(JSON.stringify(DEFAULTS[state.locale]));
+    await saveRoutines();
+  }
+}
+
+function migrateRoutines(){
+  // migrate old entries that lack a days field
+  ['morning','night'].forEach(m=>{
+    (state.routines[m]||[]).forEach(s=>{
+      if(!Array.isArray(s.days)) s.days = [];
+      if(isSequence(s)){
+        s.subSteps.forEach(sub=>{ if(typeof sub.voice !== 'string') sub.voice = ""; });
+      }
+    });
+  });
+}
+
+function isStepToday(step){
+  return !step.days || step.days.length===0 || step.days.includes(new Date().getDay());
+}
+function todaysSteps(mode){
+  return state.routines[mode].filter(isStepToday);
+}
+async function saveRoutines(){
+  try{ await lsSet('routines', JSON.stringify(state.routines)); }catch(e){}
+  if(state.syncCode) pushToCloud(); // fire-and-forget cloud push on every edit
+}
+
+// ---------- Azure Neural TTS (via Cloudflare Worker proxy) ----------
+// Used for step announcements (habit intros, voice lines, midway nudges,
+// pause/resume/end) where natural sound matters most and a little network
+// latency is fine. The per-second countdown still uses the local browser
+// voice (speechSynthesis) further below, because a network round-trip every
+// second would make the numbers drift behind the real clock.
+//
+// Calls go through a small proxy (see azure-tts-proxy-worker.js) instead of
+// hitting Azure directly, because Azure's TTS REST endpoint blocks direct
+// browser calls (CORS). The proxy also keeps the Azure key off the client,
+// out of this downloadable file.
+const PROXY_URL = "https://tts-proxy.toshiro5280.workers.dev"; // Cloudflare Worker proxy (TTS + sync)
+const SYNC_SAVE_URL = PROXY_URL + "/sync/save";
+const SYNC_LOAD_URL = PROXY_URL + "/sync/load";
+const AZURE_VOICE = { cn: "zh-CN-XiaoxiaoNeural", tw: "zh-TW-HsiaoChenNeural" };
+
+const azureAudioCache = new Map(); // "locale|text" -> object URL
+
+async function synthesizeAzure(text, locale){
+  const cacheKey = locale + "|" + text;
+  if(azureAudioCache.has(cacheKey)) return azureAudioCache.get(cacheKey);
+  const voice = AZURE_VOICE[locale] || AZURE_VOICE.cn;
+  const lang = locale === 'tw' ? 'zh-TW' : 'zh-CN';
+  const res = await fetch(PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice, lang })
+  });
+  if(!res.ok){
+    let bodyText = "";
+    try{ bodyText = await res.text(); }catch(e){}
+    throw new Error("proxy synth failed: " + res.status + " — " + bodyText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  azureAudioCache.set(cacheKey, url);
+  return url;
+}
+
+let currentAzureAudio = null;
+
+// Natural-voice speak for step announcements. Falls back to the local
+// browser voice automatically if the Azure call fails (bad connection,
+// CORS, quota, etc.) so a habit is never silently skipped.
+function speak(text, onend){
+  if(currentAzureAudio){
+    try{ currentAzureAudio.pause(); }catch(e){}
+    currentAzureAudio = null;
+  }
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+
+  synthesizeAzure(text, state.locale).then(url=>{
+    const audio = new Audio(url);
+    currentAzureAudio = audio;
+    if(onend){
+      audio.onended = onend;
+      audio.onerror = ()=>speakLocalFallback(text, onend, "Azure audio playback failed");
+    }
+    audio.play().catch(err=>speakLocalFallback(text, onend, "Azure audio play() rejected: " + err));
+  }).catch(err=>{
+    speakLocalFallback(text, onend, "Azure request failed: " + err);
+  });
+}
+
+function speakLocalFallback(text, onend, reason){
+  if(reason) console.warn("[RoutineCoach] Azure TTS fallback —", reason);
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = state.locale === 'tw' ? 'zh-TW' : 'zh-CN';
+    u.rate = 1.0;
+    if(onend){
+      u.onend = onend;
+      u.onerror = onend;
+    }
+    window.speechSynthesis.speak(u);
+    if(onend && !('speechSynthesis' in window)) onend();
+  }catch(e){ if(onend) onend(); }
+}
+
+// Speaks the remaining time as "X分Y秒" (minutes/seconds) every 5 seconds.
+// Now routed through the same Azure natural voice as step announcements
+// (with automatic local-voice fallback) — the 5-second gap between
+// announcements gives plenty of margin for the network round-trip, unlike
+// the old every-1-second cadence where that lag would have been a problem.
+// Results are cached by synthesizeAzure(), so repeated phrases like "5秒"
+// across a routine don't re-hit the API each time.
+function speakCountdownNumber(n){
+  speak(fmtMinSec(n));
+}
+
+// Chrome (desktop and Android) has a long-standing bug where speechSynthesis
+// silently stops producing audio after ~15s of continuous/queued speech unless
+// nudged. Calling resume() periodically keeps the queue flowing.
+setInterval(()=>{
+  try{
+    if(window.speechSynthesis && window.speechSynthesis.speaking){
+      window.speechSynthesis.resume();
+    }
+  }catch(e){}
+}, 4000);
+
+function setLocale(loc){
+  if(loc===state.locale) return;
+  state.locale = loc;
+  saveLocale();
+  renderChrome();
+  renderRunner();
+  renderEditor();
+}
+
+function renderChrome(){
+  document.getElementById('appTitle').textContent = T('appTitle');
+  document.getElementById('appSub').textContent = T('appSub');
+  document.getElementById('localeBtnCN').textContent = T('localeCN');
+  document.getElementById('localeBtnTW').textContent = T('localeTW');
+  document.getElementById('localeBtnCN').classList.toggle('on', state.locale==='cn');
+  document.getElementById('localeBtnTW').classList.toggle('on', state.locale==='tw');
+  document.getElementById('tabMorning').textContent = T('tabMorning');
+  document.getElementById('tabNight').textContent = T('tabNight');
+  document.getElementById('editTitle').textContent = T('editTitle');
+  document.getElementById('editorToggleBtn').textContent = state.editing ? T('done') : T('edit');
+  renderSyncCard();
+  renderImportExportCard();
+}
+
+function renderSyncCard(){
+  const card = document.getElementById('syncCard');
+  if(!card) return;
+  if(state.syncCode){
+    card.innerHTML = `
+      <p class="section-title" style="margin:0 0 8px;">${T('syncTitle')}</p>
+      <p class="small" style="margin:0 0 10px;">${T('syncActiveWith')}<strong>${escapeHtml(state.syncCode)}</strong> <span id="syncStatusBadge" class="small"></span></p>
+      <div class="rowbtns">
+        <button class="ghost" onclick="clearSyncCode()">${T('syncClear')}</button>
+      </div>
+    `;
+  } else {
+    card.innerHTML = `
+      <p class="section-title" style="margin:0 0 8px;">${T('syncTitle')}</p>
+      <p class="small" style="margin:0 0 10px;">${T('syncDesc')}</p>
+      <div class="steprow-top">
+        <input type="text" id="syncCodeInput" style="flex:1;" placeholder="${T('syncCodePH')}">
+        <button class="primary" onclick="setSyncCodeFromInput()">${T('syncSet')}</button>
+      </div>
+    `;
+  }
+  updateSyncBadge();
+}
+
+async function setSyncCodeFromInput(){
+  const input = document.getElementById('syncCodeInput');
+  if(!input) return;
+  const code = input.value.trim();
+  if(!code) return;
+  state.syncCode = code;
+  await saveSyncCodeLocally();
+  renderSyncCard();
+
+  // Reconcile: if the cloud already has data under this code, use it.
+  // Otherwise, push what's currently on this device up to seed it.
+  const cloudData = await pullFromCloud();
+  if(cloudData){
+    try{
+      state.routines = JSON.parse(cloudData);
+      migrateRoutines();
+      await lsSet('routines', cloudData);
+      renderRunner();
+      renderEditor();
+    }catch(e){}
+  } else {
+    await pushToCloud();
+  }
+}
+
+async function clearSyncCode(){
+  state.syncCode = null;
+  state.syncStatus = 'idle';
+  await saveSyncCodeLocally();
+  renderSyncCard();
+}
+
+function renderImportExportCard(){
+  const card = document.getElementById('importExportCard');
+  if(!card) return;
+  card.innerHTML = `
+    <p class="section-title" style="margin:0 0 8px;">${T('importExportTitle')}</p>
+    <p class="small" style="margin:0 0 10px;">${T('importExportDesc')}</p>
+    <textarea id="importExportArea" rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;font-family:monospace;"></textarea>
+    <div class="rowbtns" style="margin-top:10px;">
+      <button onclick="exportRoutines()">${T('exportBtn')}</button>
+      <button class="primary" onclick="importRoutines()">${T('importBtn')}</button>
+    </div>
+    <p class="small" id="importStatus" style="margin-top:8px;"></p>
+  `;
+}
+
+function exportRoutines(){
+  const area = document.getElementById('importExportArea');
+  if(!area) return;
+  area.value = JSON.stringify(state.routines, null, 2);
+  area.focus();
+  area.select();
+}
+
+async function importRoutines(){
+  const area = document.getElementById('importExportArea');
+  const statusEl = document.getElementById('importStatus');
+  if(!area) return;
+  try{
+    const parsed = JSON.parse(area.value);
+    if(!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.morning) || !Array.isArray(parsed.night)){
+      throw new Error("shape mismatch");
+    }
+    state.routines = parsed;
+    migrateRoutines();
+    await saveRoutines(); // also pushes to cloud automatically if a sync code is set
+    renderRunner();
+    renderEditor();
+    if(statusEl) statusEl.textContent = T('importSuccess');
+  }catch(e){
+    if(statusEl) statusEl.textContent = T('importFailed');
+  }
+}
+
+function switchMode(mode){
+  if(state.running) stopRun(false);
+  state.mode = mode;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.mode===mode));
+  renderRunner();
+  renderEditor();
+}
+
+function fmtTime(s){
+  const m = Math.floor(s/60), sec = s%60;
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function renderRunner(){
+  const card = document.getElementById('runnerCard');
+  const allSteps = state.routines[state.mode];
+  const steps = state.running ? state.activeSteps : todaysSteps(state.mode);
+  const skipped = allSteps.length - steps.length;
+  const dayFull = DAY_FULL[state.locale];
+
+  if(!state.running){
+    const totalSec = steps.reduce((a,s)=>a+stepDuration(s),0);
+    const modeLabel = state.mode==='morning' ? T('tabMorning') : T('tabNight');
+    if(allSteps.length === 0){
+      card.innerHTML = `
+        <div style="text-align:center;padding:10px 0;">
+          <p class="small">${T('noHabitsYet')}</p>
+        </div>
+      `;
+      return;
+    }
+    card.innerHTML = `
+      <div style="text-align:center;padding:10px 0;">
+        <p class="small">${dayFull[new Date().getDay()]} · ${T('about')} ${steps.length} ${T('habitsToday')} · ${T('about')} ${Math.round(totalSec/60)} ${T('minutes')}</p>
+        ${skipped>0 ? `<p class="skipnote">${T('skippedNote')} ${skipped} ${T('habitsUnit')}</p>` : ''}
+        <div class="rowbtns" style="margin-top:14px;">
+          <button class="primary" onclick="startRun()">${T('startRoutine')}${modeLabel}${T('routineWord')}</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if(state.currentIndex >= steps.length){
+    card.innerHTML = `
+      <div class="done-msg">
+        <div class="big">${T('routineDone')}</div>
+        <p class="small">${T('stayedOnTrack')}</p>
+      </div>
+    `;
+    return;
+  }
+
+  const step = steps[state.currentIndex];
+  const inSeq = isSequence(step);
+  const activeUnit = inSeq ? state.subQueue[state.subIndex] : step;
+  const total = activeUnit.seconds;
+  const pct = total > 0 ? (state.remaining/total) : 0;
+  const r = 80, c = 2*Math.PI*r;
+  const offset = c * (1-pct);
+
+  const subProgress = inSeq
+    ? `<p class="stepdetail" style="margin-top:-6px;">${activeUnit.name} · ${T('subStepOf')} ${state.subIndex+1} ${T('subStepOfMid')} ${state.subQueue.length} ${T('subStepOfEnd')}</p>`
+    : '';
+
+  const modeLabel = state.mode==='morning' ? T('tabMorning') : T('tabNight');
+
+  card.innerHTML = `
+    <div class="runner-header">
+      <span class="stepcount">${T('habitOf')} ${state.currentIndex+1} ${T('habitOfMid')} ${steps.length} ${T('habitOfEnd')}</span>
+      <span class="stepcount">${modeLabel}</span>
+    </div>
+    <div class="stepname">${step.name}</div>
+    ${subProgress}
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg width="180" height="180" viewBox="0 0 180 180">
+          <circle class="ring-bg" cx="90" cy="90" r="${r}"></circle>
+          <circle class="ring-fg" cx="90" cy="90" r="${r}"
+            stroke-dasharray="${c}" stroke-dashoffset="${offset}"></circle>
+        </svg>
+        <div class="ring-label">${fmtTime(state.remaining)}</div>
+      </div>
+    </div>
+    <div class="rowbtns">
+      <button onclick="prevStep()">${T('back')}</button>
+      <button onclick="togglePause()">${state.paused ? T('resume') : T('pause')}</button>
+      <button onclick="nextStep()">${T('next')}</button>
+      <button class="ghost" onclick="stopRun(true)">${T('end')}</button>
+    </div>
+    <div class="off-course" id="offCourse">${T('stayWithIt')}「${step.name}」。</div>
+  `;
+}
+
+function startRun(){
+  const steps = todaysSteps(state.mode);
+  if(!steps.length) return;
+  state.activeSteps = steps;
+  state.running = true;
+  state.paused = false;
+  state.currentIndex = 0;
+  loadStep();
+}
+
+function loadStep(){
+  const steps = state.activeSteps;
+  if(state.currentIndex >= steps.length){
+    clearInterval(state.timerId);
+    speak(T('voiceComplete'));
+    renderRunner();
+    return;
+  }
+  const step = steps[state.currentIndex];
+  clearInterval(state.timerId);
+  if(isSequence(step)){
+    state.subQueue = step.subSteps;
+    state.subIndex = 0;
+    loadSubUnit(true);
+  } else {
+    state.subQueue = null;
+    state.subIndex = 0;
+    state.remaining = step.seconds;
+    renderRunner();
+    const line = step.voice && step.voice.trim() ? step.voice : step.name;
+    speak(line, startTimer);
+  }
+}
+
+function startTimer(){
+  clearInterval(state.timerId);
+  state.timerId = setInterval(tick, 1000);
+}
+
+function loadSubUnit(announceHabitFirst){
+  const step = state.activeSteps[state.currentIndex];
+  const unit = state.subQueue[state.subIndex];
+  state.remaining = unit.seconds;
+  renderRunner();
+  const line = unit.voice && unit.voice.trim() ? unit.voice : unit.name;
+  if(announceHabitFirst){
+    const intro = step.voice && step.voice.trim() ? step.voice : step.name;
+    speak(`${intro}。${T('voiceFirst')}：${line}`, startTimer);
+  } else {
+    speak(line, startTimer);
+  }
+}
+
+function tick(){
+  if(state.paused) return;
+  state.remaining--;
+  const stepEl = document.querySelector('.ring-label');
+  const fgEl = document.querySelector('.ring-fg');
+  if(stepEl) stepEl.textContent = fmtTime(Math.max(state.remaining,0));
+  if(fgEl){
+    const step = state.activeSteps[state.currentIndex];
+    const activeUnit = isSequence(step) ? state.subQueue[state.subIndex] : step;
+    const total = activeUnit.seconds || 1;
+    const pct = Math.max(state.remaining,0)/total;
+    const r = 80, c = 2*Math.PI*r;
+    fgEl.setAttribute('stroke-dashoffset', c*(1-pct));
+  }
+  // gentle midway nudge (simple steps only)
+  const step = state.activeSteps[state.currentIndex];
+  let midwaySpoke = false;
+  if(!isSequence(step) && step.seconds > 40 && state.remaining === Math.floor(step.seconds/2)){
+    const msg = step.midway && step.midway.trim() ? step.midway : `${T('voiceStillGoing')}：${step.name}`;
+    flashOffCourse(msg);
+    if(step.midway && step.midway.trim()){ speak(step.midway); midwaySpoke = true; }
+  }
+  // audible countdown, spoken every 5 seconds for the full duration
+  if(!midwaySpoke && state.remaining >= 1 && state.remaining % 5 === 0){
+    speakCountdownNumber(state.remaining);
+  }
+  if(state.remaining <= 0){
+    clearInterval(state.timerId);
+    if(isSequence(step) && state.subIndex < state.subQueue.length-1){
+      state.subIndex++;
+      loadSubUnit(false);
+    } else {
+      nextStep();
+    }
+  }
+}
+
+function flashOffCourse(msg){
+  const el = document.getElementById('offCourse');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2500);
+}
+
+function nextStep(){
+  clearInterval(state.timerId);
+  state.currentIndex++;
+  loadStep();
+}
+function prevStep(){
+  clearInterval(state.timerId);
+  state.currentIndex = Math.max(0, state.currentIndex-1);
+  loadStep();
+}
+function togglePause(){
+  state.paused = !state.paused;
+  speak(state.paused ? T('voicePaused') : T('voiceResumed'));
+  renderRunner();
+}
+function stopRun(announce){
+  clearInterval(state.timerId);
+  state.running = false;
+  state.paused = false;
+  state.currentIndex = 0;
+  if(announce) speak(T('voiceEnded'));
+  renderRunner();
+}
+
+// ---------- Editor ----------
+function toggleEditor(){
+  state.editing = !state.editing;
+  document.getElementById('editorBody').style.display = state.editing ? 'block' : 'none';
+  document.getElementById('editorToggleBtn').textContent = state.editing ? T('done') : T('edit');
+  renderEditor();
+}
+
+function renderEditor(){
+  if(!state.editing) return;
+  const body = document.getElementById('editorBody');
+  const steps = state.routines[state.mode];
+  const today = new Date().getDay();
+  const dayLabels = DAY_LABELS[state.locale];
+  const dayFull = DAY_FULL[state.locale];
+  let html = `<ul class="steplist" id="steplist" style="list-style:none;margin:0;padding:0;">`;
+  steps.forEach((s,i)=>{
+    const everyDay = !s.days || s.days.length===0;
+    const seq = isSequence(s);
+    html += `
+      <li class="steprow">
+        <div class="steprow-top">
+          <div class="reorderbtns">
+            <button type="button" onclick="moveStep(${i},-1)" ${i===0?'disabled':''} aria-label="up"><span class="tri tri-up" aria-hidden="true"></span></button>
+            <button type="button" onclick="moveStep(${i},1)" ${i===steps.length-1?'disabled':''} aria-label="down"><span class="tri tri-down" aria-hidden="true"></span></button>
+          </div>
+          <input type="text" value="${escapeHtml(s.name)}" oninput="updateStep(${i},'name',this.value)" placeholder="${T('habitNamePH')}">
+          <button class="del" onclick="deleteStep(${i})">${T('remove')}</button>
+        </div>
+        <div class="steprow-top">
+          <span class="small" style="min-width:70px;">${T('type')}</span>
+          <div class="habittype">
+            <button type="button" class="typebtn ${!seq?'on':''}" onclick="setHabitType(${i},false)">${T('singleTimer')}</button>
+            <button type="button" class="typebtn ${seq?'on':''}" onclick="setHabitType(${i},true)">${T('sequence')}</button>
+          </div>
+        </div>
+        ${seq ? renderSeqEditor(i,s) : `
+          <div class="steprow-top">
+            <span class="small" style="min-width:70px;">${T('duration')}</span>
+            <input type="number" min="5" step="5" value="${Math.round(s.seconds)}" oninput="updateStep(${i},'seconds',this.value)">
+            <span class="unit">${T('sec')}</span>
+            <span class="small" id="durationLabel-${i}">(${fmtMinSec(Math.round(s.seconds))})</span>
+          </div>
+          <div class="steprow-top">
+            <input type="text" style="flex:1;" value="${escapeHtml(s.voice||'')}"
+              oninput="updateStep(${i},'voice',this.value)"
+              placeholder="${T('voiceStartPH')}">
+          </div>
+          <div class="steprow-top">
+            <input type="text" style="flex:1;" value="${escapeHtml(s.midway||'')}"
+              oninput="updateStep(${i},'midway',this.value)"
+              placeholder="${T('midwayPH')}">
+          </div>
+        `}
+        <div class="steprow-top">
+          <div class="daypicker">
+            ${dayLabels.map((lbl,d)=>`
+              <button type="button" class="daybtn ${(s.days&&s.days.includes(d))?'on':''}"
+                onclick="toggleDay(${i},${d})" title="${dayFull[d]}">${lbl}</button>
+            `).join('')}
+          </div>
+          ${everyDay ? '' : `<span class="todaybadge">${s.days.includes(today) ? T('onToday') : T('offToday')}</span>`}
+        </div>
+      </li>`;
+  });
+  html += `</ul>
+    <button class="addbtn" onclick="addStep()">${T('addHabit')}</button>
+    <p class="small" style="margin-top:10px;">${T('typeHelp')}</p>`;
+  body.innerHTML = html;
+}
+
+function renderSeqEditor(i, s){
+  const total = stepDuration(s);
+  let subs = s.subSteps.map((m,mi)=>`
+    <div class="blocksub">
+      <div class="reorderbtns">
+        <button type="button" onclick="moveSubStep(${i},${mi},-1)" ${mi===0?'disabled':''} aria-label="up"><span class="tri tri-up" aria-hidden="true"></span></button>
+        <button type="button" onclick="moveSubStep(${i},${mi},1)" ${mi===s.subSteps.length-1?'disabled':''} aria-label="down"><span class="tri tri-down" aria-hidden="true"></span></button>
+      </div>
+      <input type="text" class="substepname" style="flex:1;" value="${escapeHtml(m.name)}"
+        oninput="updateSubStep(${i},${mi},'name',this.value)" placeholder="${T('subStepNamePH')}">
+      <input type="number" min="5" step="5" value="${m.seconds}"
+        oninput="updateSubStep(${i},${mi},'seconds',this.value)">
+      <span class="unit">${T('sec')}</span>
+      <span class="small" id="subDurationLabel-${i}-${mi}">(${fmtMinSec(m.seconds)})</span>
+      <button type="button" class="del" style="padding:5px 9px;" onclick="removeSubStep(${i},${mi})">${T('remove')}</button>
+    </div>
+    <div class="blocksub" style="margin-top:-2px;">
+      <input type="text" style="flex:1;" value="${escapeHtml(m.voice||'')}"
+        oninput="updateSubStep(${i},${mi},'voice',this.value)"
+        placeholder="${T('subVoicePH')}">
+    </div>
+  `).join('');
+  return `
+    <div class="seqbox">
+      <p class="small" style="margin:0 0 8px;">${T('subStepsOrder')}</p>
+      ${subs}
+      <button type="button" style="margin:4px 0 10px;" onclick="addSubStep(${i})">${T('addSubStep')}</button>
+      <p class="seqtotal" id="seqTotal-${i}">${T('total')} ${Math.round(total/60*10)/10} ${T('min')}</p>
+    </div>
+  `;
+}
+
+function updateSubStep(i, mi, field, value){
+  const step = state.routines[state.mode][i];
+  const sub = step.subSteps[mi];
+  if(field==='seconds') sub.seconds = Math.max(5, parseInt(value)||5);
+  else sub[field] = value;
+  saveRoutines();
+  if(field==='seconds'){
+    // patch just this row's label + the sequence total, without re-rendering
+    // the whole editor (which would knock the input out of focus mid-type)
+    const labelEl = document.getElementById(`subDurationLabel-${i}-${mi}`);
+    if(labelEl) labelEl.textContent = `(${fmtMinSec(sub.seconds)})`;
+    const totalEl = document.getElementById(`seqTotal-${i}`);
+    if(totalEl) totalEl.textContent = `${T('total')} ${Math.round(stepDuration(step)/60*10)/10} ${T('min')}`;
+  }
+}
+function addSubStep(i){
+  state.routines[state.mode][i].subSteps.push({name:T('newSubStep'), seconds:30, voice:""});
+  saveRoutines(); renderEditor();
+}
+function removeSubStep(i, mi){
+  const steps = state.routines[state.mode][i].subSteps;
+  if(steps.length<=1) return;
+  steps.splice(mi,1);
+  saveRoutines(); renderEditor();
+}
+
+function setHabitType(i, toSequence){
+  const step = state.routines[state.mode][i];
+  if(toSequence && !isSequence(step)){
+    step.subSteps = [{name:step.name, seconds:step.seconds||30, voice:""}];
+  } else if(!toSequence && isSequence(step)){
+    step.seconds = stepDuration(step);
+    delete step.subSteps;
+    if(!('voice' in step)) step.voice = "";
+    if(!('midway' in step)) step.midway = "";
+  }
+  saveRoutines();
+  renderEditor();
+  if(!state.running) renderRunner();
+}
+
+function moveStep(i, dir){
+  const steps = state.routines[state.mode];
+  const j = i + dir;
+  if(j<0 || j>=steps.length) return;
+  [steps[i], steps[j]] = [steps[j], steps[i]];
+  saveRoutines();
+  renderEditor();
+  if(!state.running) renderRunner();
+}
+function moveSubStep(i, mi, dir){
+  const subs = state.routines[state.mode][i].subSteps;
+  const mj = mi + dir;
+  if(mj<0 || mj>=subs.length) return;
+  [subs[mi], subs[mj]] = [subs[mj], subs[mi]];
+  saveRoutines();
+  renderEditor();
+}
+
+function toggleDay(i, d){
+  const s = state.routines[state.mode][i];
+  if(!Array.isArray(s.days)) s.days = [];
+  const idx = s.days.indexOf(d);
+  if(idx===-1) s.days.push(d); else s.days.splice(idx,1);
+  saveRoutines();
+  renderEditor();
+  if(!state.running) renderRunner();
+}
+
+function escapeHtml(str){
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function updateStep(i, field, value){
+  const steps = state.routines[state.mode];
+  if(field==='seconds'){
+    steps[i][field] = Math.max(5, parseInt(value)||5);
+  } else {
+    steps[i][field] = value;
+  }
+  saveRoutines();
+  if(state.running) renderRunner();
+  if(field==='seconds'){
+    // patch just this row's label instead of re-rendering the whole editor
+    // (which would knock the input out of focus after every digit typed)
+    const labelEl = document.getElementById(`durationLabel-${i}`);
+    if(labelEl) labelEl.textContent = `(${fmtMinSec(steps[i].seconds)})`;
+  }
+}
+function addStep(){
+  state.routines[state.mode].push({name:T('newHabit'), seconds:60, voice:"", midway:"", days:[]});
+  saveRoutines();
+  renderEditor();
+}
+function deleteStep(i){
+  state.routines[state.mode].splice(i,1);
+  saveRoutines();
+  renderEditor();
+  if(state.running) renderRunner();
+}
+
+// ---------- Init ----------
+(async function init(){
+  await loadLocale();
+  await loadRoutines();
+  renderChrome();
+  renderRunner();
+  renderEditor();
+})();
+
+// Pull fresh data whenever the app regains focus/visibility — covers
+// switching back to this tab, unlocking the phone, or reopening the app.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') backgroundSyncCheck();
+});
+window.addEventListener('focus', backgroundSyncCheck);
+
+// Backup: also check periodically while the app is left open, in case
+// focus/visibility events don't fire reliably on a given device.
+setInterval(backgroundSyncCheck, 30000);
+</script>
+</body>
+</html>
