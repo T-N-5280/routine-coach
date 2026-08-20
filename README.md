@@ -1,5 +1,7 @@
 # Routine Coach（日常打卡助手）
 
+[English](README.md) (this file) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
+
 A voice-guided, bilingual (Mandarin — Mainland & Taiwan) daily habit tracker. Runs entirely as a single HTML file in the browser, speaks you through your morning and night routines with a natural-sounding voice, and syncs across devices.
 
 ---
