@@ -1,0 +1,456 @@
+{
+  "morning": [
+    {
+      "name": "整理床鋪",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "如廁（如有需要）",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "量體重",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "清潔隱形牙套",
+      "days": [],
+      "subSteps": [
+        {
+          "name": "用水槽沖洗",
+          "seconds": 20,
+          "voice": ""
+        },
+        {
+          "name": "用牙刷刷洗",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "放入超音波清潔機",
+          "seconds": 15,
+          "voice": "放入超音波清潔機。每週使用一次專用清潔劑代替清水。"
+        }
+      ]
+    },
+    {
+      "name": "備餐",
+      "days": [],
+      "subSteps": [
+        {
+          "name": "取出並切雞胸肉",
+          "seconds": 120,
+          "voice": ""
+        },
+        {
+          "name": "將半份雞胸肉放入盤中微波",
+          "seconds": 30,
+          "voice": "立刻將半份雞胸肉放入盤中微波。"
+        },
+        {
+          "name": "分裝米飯和雞胸肉",
+          "seconds": 180,
+          "voice": "將1.25杯米飯和半份雞胸肉分裝到三個容器：兩份用於運動前後，一份晚餐；再裝一份到餐盤作為早餐。"
+        },
+        {
+          "name": "秤量泡菜",
+          "seconds": 30,
+          "voice": "秤量200克泡菜，裝入另一個容器。"
+        },
+        {
+          "name": "秤量醃黃瓜",
+          "seconds": 30,
+          "voice": "秤量20個醃黃瓜，裝入容器。"
+        },
+        {
+          "name": "裝沙丁魚",
+          "seconds": 20,
+          "voice": "裝1包沙丁魚。"
+        },
+        {
+          "name": "裝橄欖油",
+          "seconds": 20,
+          "voice": "裝3湯匙橄欖油。"
+        },
+        {
+          "name": "清洗量米杯和電子鍋",
+          "seconds": 60,
+          "voice": ""
+        }
+      ]
+    },
+    {
+      "name": "吃早餐",
+      "seconds": 600,
+      "days": []
+    },
+    {
+      "name": "收好隱形牙套和超音波清潔機",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "刷牙",
+      "seconds": 120,
+      "days": []
+    },
+    {
+      "name": "清洗牙刷",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "洗澡",
+      "seconds": 420,
+      "days": []
+    },
+    {
+      "name": "擦保濕乳液",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "擦防曬乳",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "用止汗劑",
+      "seconds": 10,
+      "days": []
+    },
+    {
+      "name": "噴香水",
+      "seconds": 10,
+      "days": []
+    },
+    {
+      "name": "用超細纖維布和眼鏡清潔劑擦眼鏡",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "收拾背包",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "洗衣服",
+      "days": [
+        6
+      ],
+      "subSteps": [
+        {
+          "name": "放入洗衣機",
+          "seconds": 120,
+          "voice": "把所有衣物、浴巾、毛巾和床上用品放入洗衣機。"
+        },
+        {
+          "name": "放入烘乾機",
+          "seconds": 60,
+          "voice": "洗完後放入烘乾機。"
+        },
+        {
+          "name": "掛起襯衫褲子毛巾",
+          "seconds": 180,
+          "voice": "掛起襯衫、褲子和毛巾。"
+        },
+        {
+          "name": "軍事捲法捲好收納",
+          "seconds": 120,
+          "voice": "用軍事捲法捲好內褲、襪子、短褲和泳衣，放在掛衣架上方的架子上。"
+        },
+        {
+          "name": "鋪回床上用品",
+          "seconds": 120,
+          "voice": "把床上用品鋪回床上。"
+        }
+      ]
+    }
+  ],
+  "night": [
+    {
+      "name": "備餐",
+      "days": [],
+      "subSteps": [
+        {
+          "name": "秤雞胸肉重量並記錄到App",
+          "seconds": 90,
+          "voice": ""
+        },
+        {
+          "name": "將多餘雞胸肉放入容器",
+          "seconds": 60,
+          "voice": ""
+        },
+        {
+          "name": "把雞胸肉放入氣炸鍋",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "收集餐具",
+          "seconds": 60,
+          "voice": "收集早餐和秤雞胸肉用的盤子、刀子、湯匙、叉子、四個容器，如果用了玻璃杯也一起收集。"
+        },
+        {
+          "name": "清洗餐具",
+          "seconds": 180,
+          "voice": ""
+        },
+        {
+          "name": "用電子鍋煮白飯",
+          "seconds": 60,
+          "voice": "用電子鍋煮白飯，2.75杯生米。"
+        }
+      ]
+    },
+    {
+      "name": "靈活度訓練",
+      "days": [],
+      "subSteps": [
+        {
+          "name": "前彎",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "橫劈腿",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "前彎",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "橫劈腿",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "前彎",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "橫劈腿",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，左腳在前",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，右腳在前",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，左腳在前",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，右腳在前",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，左腳在前",
+          "seconds": 30,
+          "voice": ""
+        },
+        {
+          "name": "休息",
+          "seconds": 10,
+          "voice": ""
+        },
+        {
+          "name": "直劈腿，右腳在前",
+          "seconds": 30,
+          "voice": ""
+        }
+      ]
+    },
+    {
+      "name": "裝雞胸肉入容器並放入冰箱",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "清洗氣炸鍋",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "清洗湯匙和叉子",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "把衣服拿進浴室",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "用牙線",
+      "seconds": 60,
+      "days": []
+    },
+    {
+      "name": "清潔舌苔",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "清洗刮舌器",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "刷牙",
+      "seconds": 120,
+      "days": []
+    },
+    {
+      "name": "清洗牙刷",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "戴上隱形牙套",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "摘下眼鏡",
+      "seconds": 10,
+      "days": []
+    },
+    {
+      "name": "洗澡",
+      "seconds": 600,
+      "days": []
+    },
+    {
+      "name": "在小腿和手臂擦身體乳",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "洗面乳",
+      "seconds": 30,
+      "days": []
+    },
+    {
+      "name": "擦A酸",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "擦保濕乳液",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "用中文寫日記",
+      "days": [],
+      "subSteps": [
+        {
+          "name": "寫日記20分鐘",
+          "seconds": 1200,
+          "voice": "用中文寫日記，寫滿20分鐘，時間到就停筆。可以查單字，但不要翻譯整句話。"
+        },
+        {
+          "name": "用聊天機器人檢查修正",
+          "seconds": 600,
+          "voice": "花10分鐘用聊天機器人檢查並修正今天日記裡的錯誤。"
+        }
+      ]
+    },
+    {
+      "name": "幫手機充電並放下",
+      "seconds": 20,
+      "days": []
+    },
+    {
+      "name": "刮鬍子",
+      "seconds": 180,
+      "days": [
+        0
+      ],
+      "voice": "刮鬍子。記得晚上幫刮鬍刀充電。"
+    },
+    {
+      "name": "剪指甲",
+      "seconds": 60,
+      "days": [
+        0
+      ]
+    },
+    {
+      "name": "把隱形眼鏡放進運動包",
+      "seconds": 30,
+      "days": [
+        0
+      ]
+    }
+  ]
+}
