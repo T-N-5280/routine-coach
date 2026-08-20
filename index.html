@@ -154,6 +154,8 @@
   <div class="card" id="syncCard"></div>
 
   <div class="card" id="importExportCard"></div>
+
+  <div class="card" id="historyCard"></div>
 </div>
 
 <script>
@@ -218,13 +220,18 @@ const STR = {
   newHabit:      { cn:"新习惯", tw:"新習慣" },
   voiceComplete: { cn:"日常完成。做得很好。", tw:"日常完成，做得很好。" },
   syncTitle:     { cn:"跨设备同步", tw:"跨裝置同步" },
-  syncDesc:      { cn:"设置一个同步码，在其他设备上输入相同的码，就能看到同样的习惯。", tw:"設定一個同步碼，在其他裝置上輸入相同的碼，就能看到同樣的習慣。" },
+  syncDesc:      { cn:"设置一个同步码，在其他设备上输入相同的码。设置后请手动选择「拉取」或「推送」。", tw:"設定一個同步碼，在其他裝置上輸入相同的碼。設定後請手動選擇「拉取」或「推送」。" },
   syncCodePH:    { cn:"输入或创建同步码", tw:"輸入或建立同步碼" },
   syncSet:       { cn:"设置", tw:"設定" },
   syncClear:     { cn:"清除", tw:"清除" },
   syncing:       { cn:"同步中…", tw:"同步中…" },
   synced:        { cn:"已同步 ✓", tw:"已同步 ✓" },
   syncError:     { cn:"同步失败", tw:"同步失敗" },
+  syncPull:      { cn:"从云端拉取", tw:"從雲端拉取" },
+  syncPush:      { cn:"推送到云端", tw:"推送到雲端" },
+  syncPulled:    { cn:"已从云端拉取 ✓", tw:"已從雲端拉取 ✓" },
+  syncPushed:    { cn:"已推送到云端 ✓", tw:"已推送到雲端 ✓" },
+  syncNoCloudData:{ cn:"这个同步码在云端还没有数据", tw:"這個同步碼在雲端還沒有資料" },
   syncActiveWith:{ cn:"当前同步码：", tw:"目前同步碼：" },
   noHabitsYet:   { cn:"还没有添加习惯，点击下方「编辑」开始添加。", tw:"還沒有新增習慣，點擊下方「編輯」開始新增。" },
   importExportTitle: { cn:"导入 / 导出", tw:"匯入 / 匯出" },
@@ -233,6 +240,27 @@ const STR = {
   exportBtn:     { cn:"导出", tw:"匯出" },
   importSuccess: { cn:"导入成功！", tw:"匯入成功！" },
   importFailed:  { cn:"导入失败，请检查粘贴的内容格式是否正确。", tw:"匯入失敗，請檢查貼上的內容格式是否正確。" },
+  historyTitle:  { cn:"历史版本", tw:"歷史版本" },
+  historyDesc:   { cn:"应用会自动保存修改记录（保存在本设备上），可以随时恢复到之前的版本。", tw:"應用程式會自動保存修改記錄（保存在本裝置上），可以隨時恢復到先前的版本。" },
+  historyEmpty:  { cn:"还没有历史记录。", tw:"還沒有歷史記錄。" },
+  historyRestore:{ cn:"恢复", tw:"恢復" },
+  historyConfirm:{ cn:"确定要恢复到这个版本吗？当前的修改将被覆盖（但会先记录为新的历史版本）。", tw:"確定要恢復到這個版本嗎？目前的修改將被覆蓋（但會先記錄為新的歷史版本）。" },
+  historyMorningCount: { cn:"早晨", tw:"早上" },
+  historyNightCount:   { cn:"夜晚", tw:"晚上" },
+  historyHabitsUnit:   { cn:"个", tw:"個" },
+  historyRestored: { cn:"已恢复 ✓", tw:"已恢復 ✓" },
+  historyViewDiff: { cn:"查看差异", tw:"查看差異" },
+  historyNoChange: { cn:"与当前版本相同", tw:"與目前版本相同" },
+  historyAdded:    { cn:"新增", tw:"新增" },
+  historyRemoved:  { cn:"已删除", tw:"已刪除" },
+  historyDuration: { cn:"时长", tw:"時長" },
+  historyVoiceChanged:   { cn:"语音提示已修改", tw:"語音提示已修改" },
+  historyMidwayChanged:  { cn:"中途提醒已修改", tw:"中途提醒已修改" },
+  historySubStepCount:   { cn:"子步骤数量", tw:"子步驟數量" },
+  historySubStepsChanged:{ cn:"子步骤内容已修改", tw:"子步驟內容已修改" },
+  historyDaysChanged:    { cn:"日期设置已修改", tw:"日期設定已修改" },
+  historyBecameSequence: { cn:"改为引导序列", tw:"改為引導序列" },
+  historyBecameSimple:   { cn:"改为单一计时", tw:"改為單一計時" },
   voiceFirst:    { cn:"第一步", tw:"第一步" },
   voicePaused:   { cn:"已暂停。", tw:"已暫停。" },
   voiceResumed:  { cn:"继续。", tw:"繼續。" },
@@ -326,14 +354,16 @@ async function saveLocale(){
 // account system — the code itself is the only thing gating access, so
 // treat it like a light passphrase (don't reuse a real password) and keep
 // it private since anyone with the code can read/write your routines.
+// Baked-in sync code: this app is set up to always use one single shared
+// data set across every device, so there's no manual "connect" step —
+// it's always effectively "logged in" to this one code.
+const HARDCODED_SYNC_CODE = "toshiro";
+
 async function loadSyncCode(){
-  try{
-    const r = await lsGet('syncCode');
-    if(r && r.value) state.syncCode = r.value;
-  }catch(e){}
+  state.syncCode = HARDCODED_SYNC_CODE;
 }
 async function saveSyncCodeLocally(){
-  try{ await lsSet('syncCode', state.syncCode || ''); }catch(e){}
+  // no-op now that the sync code is fixed rather than user-editable
 }
 
 async function pullFromCloud(){
@@ -391,7 +421,7 @@ async function pushToCloud(){
 }
 
 function updateSyncBadge(){
-  const el = document.getElementById('syncStatusBadge');
+  const el = document.getElementById('syncActionStatus');
   if(!el) return;
   if(!state.syncCode){ el.textContent = ''; return; }
   const labels = { idle:'', syncing: T('syncing'), synced: T('synced'), error: T('syncError') };
@@ -410,6 +440,7 @@ async function loadRoutines(){
         state.routines = JSON.parse(cloudData);
         migrateRoutines();
         await lsSet('routines', cloudData); // keep local cache in sync too
+        recordHistorySnapshot();
         return;
       }catch(e){ /* fall through to local/defaults below */ }
     }
@@ -421,6 +452,7 @@ async function loadRoutines(){
     state.routines = JSON.parse(r.value);
     migrateRoutines();
     if(state.syncCode) pushToCloud(); // seed the cloud with what we have locally
+    recordHistorySnapshot();
   }catch(e){
     state.routines = JSON.parse(JSON.stringify(DEFAULTS[state.locale]));
     await saveRoutines();
@@ -448,6 +480,54 @@ function todaysSteps(mode){
 async function saveRoutines(){
   try{ await lsSet('routines', JSON.stringify(state.routines)); }catch(e){}
   if(state.syncCode) pushToCloud(); // fire-and-forget cloud push on every edit
+  recordHistorySnapshot();
+}
+
+// ---------- Version history (local, per device) ----------
+// Every save is a candidate snapshot, but we throttle so rapid edits (like
+// typing a habit name letter by letter) don't flood the history with near-
+// identical entries. A snapshot is only recorded if enough time has passed
+// since the last one AND the content actually changed since then. Capped to
+// the most recent HISTORY_LIMIT entries so it doesn't grow unbounded.
+const HISTORY_KEY = "history";
+const HISTORY_LIMIT = 30;
+const HISTORY_MIN_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+
+async function getHistory(){
+  try{
+    const r = await lsGet(HISTORY_KEY);
+    if(!r) return [];
+    return JSON.parse(r.value);
+  }catch(e){ return []; }
+}
+async function setHistory(list){
+  try{ await lsSet(HISTORY_KEY, JSON.stringify(list)); }catch(e){}
+}
+
+async function recordHistorySnapshot(){
+  const currentData = JSON.stringify(state.routines);
+  const history = await getHistory();
+  const last = history[history.length - 1];
+  const now = Date.now();
+  if(last && last.data === currentData) return; // nothing actually changed
+  if(last && (now - last.ts) < HISTORY_MIN_INTERVAL_MS) return; // too soon
+  history.push({ ts: now, data: currentData });
+  while(history.length > HISTORY_LIMIT) history.shift();
+  await setHistory(history);
+}
+
+function habitCounts(dataStr){
+  try{
+    const parsed = JSON.parse(dataStr);
+    return { morning: (parsed.morning||[]).length, night: (parsed.night||[]).length };
+  }catch(e){ return { morning:0, night:0 }; }
+}
+
+function fmtHistoryDate(ts){
+  const d = new Date(ts);
+  return d.toLocaleString(state.locale==='tw' ? 'zh-TW' : 'zh-CN', {
+    month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'
+  });
 }
 
 // ---------- Azure Neural TTS (via Cloudflare Worker proxy) ----------
@@ -573,62 +653,52 @@ function renderChrome(){
   document.getElementById('editorToggleBtn').textContent = state.editing ? T('done') : T('edit');
   renderSyncCard();
   renderImportExportCard();
+  renderHistoryCard();
 }
 
 function renderSyncCard(){
   const card = document.getElementById('syncCard');
   if(!card) return;
-  if(state.syncCode){
-    card.innerHTML = `
-      <p class="section-title" style="margin:0 0 8px;">${T('syncTitle')}</p>
-      <p class="small" style="margin:0 0 10px;">${T('syncActiveWith')}<strong>${escapeHtml(state.syncCode)}</strong> <span id="syncStatusBadge" class="small"></span></p>
-      <div class="rowbtns">
-        <button class="ghost" onclick="clearSyncCode()">${T('syncClear')}</button>
-      </div>
-    `;
-  } else {
-    card.innerHTML = `
-      <p class="section-title" style="margin:0 0 8px;">${T('syncTitle')}</p>
-      <p class="small" style="margin:0 0 10px;">${T('syncDesc')}</p>
-      <div class="steprow-top">
-        <input type="text" id="syncCodeInput" style="flex:1;" placeholder="${T('syncCodePH')}">
-        <button class="primary" onclick="setSyncCodeFromInput()">${T('syncSet')}</button>
-      </div>
-    `;
-  }
-  updateSyncBadge();
+  // Sync code is fixed (baked into the app), so this always shows the
+  // connected state — no code entry, no clearing/switching.
+  card.innerHTML = `
+    <p class="section-title" style="margin:0 0 8px;">${T('syncTitle')}</p>
+    <p class="small" id="syncActionStatus" style="margin-bottom:8px;min-height:16px;"></p>
+    <div class="rowbtns">
+      <button class="primary" onclick="manualPull()">${T('syncPull')}</button>
+      <button onclick="manualPush()">${T('syncPush')}</button>
+    </div>
+  `;
 }
 
-async function setSyncCodeFromInput(){
-  const input = document.getElementById('syncCodeInput');
-  if(!input) return;
-  const code = input.value.trim();
-  if(!code) return;
-  state.syncCode = code;
-  await saveSyncCodeLocally();
-  renderSyncCard();
-
-  // Reconcile: if the cloud already has data under this code, use it.
-  // Otherwise, push what's currently on this device up to seed it.
+// Entering a code only "connects" this device to it — it does NOT
+// automatically pull or push anything. You decide the direction afterward
+// with the Pull/Push buttons, so nothing gets silently overwritten.
+async function manualPull(){
+  const statusEl = document.getElementById('syncActionStatus');
+  if(statusEl) statusEl.textContent = T('syncing');
   const cloudData = await pullFromCloud();
-  if(cloudData){
-    try{
-      state.routines = JSON.parse(cloudData);
-      migrateRoutines();
-      await lsSet('routines', cloudData);
-      renderRunner();
-      renderEditor();
-    }catch(e){}
-  } else {
-    await pushToCloud();
+  if(!cloudData){
+    if(statusEl) statusEl.textContent = T('syncNoCloudData');
+    return;
+  }
+  try{
+    state.routines = JSON.parse(cloudData);
+    migrateRoutines();
+    await lsSet('routines', cloudData);
+    renderRunner();
+    renderEditor();
+    if(statusEl) statusEl.textContent = T('syncPulled');
+  }catch(e){
+    if(statusEl) statusEl.textContent = T('syncError');
   }
 }
 
-async function clearSyncCode(){
-  state.syncCode = null;
-  state.syncStatus = 'idle';
-  await saveSyncCodeLocally();
-  renderSyncCard();
+async function manualPush(){
+  const statusEl = document.getElementById('syncActionStatus');
+  if(statusEl) statusEl.textContent = T('syncing');
+  await pushToCloud();
+  if(statusEl) statusEl.textContent = state.syncStatus === 'synced' ? T('syncPushed') : T('syncError');
 }
 
 function renderImportExportCard(){
@@ -672,6 +742,139 @@ async function importRoutines(){
   }catch(e){
     if(statusEl) statusEl.textContent = T('importFailed');
   }
+}
+
+async function renderHistoryCard(){
+  const card = document.getElementById('historyCard');
+  if(!card) return;
+  const history = await getHistory();
+  const entries = [...history].reverse(); // most recent first
+  const currentData = JSON.stringify(state.routines);
+  let html = `
+    <p class="section-title" style="margin:0 0 8px;">${T('historyTitle')}</p>
+    <p class="small" style="margin:0 0 10px;">${T('historyDesc')}</p>
+  `;
+  if(entries.length === 0){
+    html += `<p class="small">${T('historyEmpty')}</p>`;
+  } else {
+    html += `<ul class="steplist" style="list-style:none;margin:0;padding:0;">`;
+    entries.forEach((entry, idx)=>{
+      const counts = habitCounts(entry.data);
+      const realIndex = history.length - 1 - idx;
+      html += `
+        <li style="flex-direction:column;align-items:stretch;gap:6px;">
+          <div class="steprow-top">
+            <div style="flex:1;">
+              <div class="small">${fmtHistoryDate(entry.ts)}</div>
+              <div class="small">${T('historyMorningCount')} ${counts.morning}${T('historyHabitsUnit')} · ${T('historyNightCount')} ${counts.night}${T('historyHabitsUnit')}</div>
+            </div>
+            <button onclick="toggleHistoryDiff(${realIndex})">${T('historyViewDiff')}</button>
+            <button class="primary" onclick="restoreHistoryEntry(${realIndex})">${T('historyRestore')}</button>
+          </div>
+          <div id="historyDiff-${realIndex}" style="display:none;"></div>
+        </li>
+      `;
+    });
+    html += `</ul>`;
+  }
+  card.innerHTML = html;
+}
+
+function toggleHistoryDiff(historyIndex){
+  const el = document.getElementById(`historyDiff-${historyIndex}`);
+  if(!el) return;
+  if(el.style.display === 'none'){
+    el.style.display = 'block';
+    renderHistoryDiff(historyIndex);
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function renderHistoryDiff(historyIndex){
+  const el = document.getElementById(`historyDiff-${historyIndex}`);
+  if(!el) return;
+  const history = await getHistory();
+  const entry = history[historyIndex];
+  if(!entry){ el.innerHTML = ''; return; }
+  let oldData, newData;
+  try{
+    oldData = JSON.parse(entry.data);
+    newData = state.routines;
+  }catch(e){ el.innerHTML = ''; return; }
+
+  const diffHtml = ['morning','night'].map(mode=>{
+    const modeLabel = mode==='morning' ? T('tabMorning') : T('tabNight');
+    const diff = diffHabitLists(oldData[mode]||[], newData[mode]||[]);
+    if(diff.added.length===0 && diff.removed.length===0 && diff.changed.length===0){
+      return `<div class="small" style="margin-bottom:6px;"><strong>${modeLabel}：</strong>${T('historyNoChange')}</div>`;
+    }
+    let lines = [];
+    diff.added.forEach(name=> lines.push(`<div style="color:var(--good);">+ ${escapeHtml(name)} (${T('historyAdded')})</div>`));
+    diff.removed.forEach(name=> lines.push(`<div style="color:var(--warn);">− ${escapeHtml(name)} (${T('historyRemoved')})</div>`));
+    diff.changed.forEach(c=> lines.push(`<div>~ ${escapeHtml(c.name)}：${c.changes.map(escapeHtml).join('；')}</div>`));
+    return `<div class="small" style="margin-bottom:6px;"><strong>${modeLabel}：</strong><div style="margin-top:2px;">${lines.join('')}</div></div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="seqbox">${diffHtml}</div>`;
+}
+
+// Compares two habit arrays (old -> new) by name, since habits don't carry
+// stable IDs. Reports habits that were added, removed, or changed (with a
+// short human-readable description of what changed) — everything unchanged
+// is left out to keep the diff focused on what's actually different.
+function diffHabitLists(oldList, newList){
+  const oldMap = new Map(oldList.map(h=>[h.name, h]));
+  const newMap = new Map(newList.map(h=>[h.name, h]));
+  const added = [...newMap.keys()].filter(n=>!oldMap.has(n));
+  const removed = [...oldMap.keys()].filter(n=>!newMap.has(n));
+  const changed = [];
+  oldMap.forEach((oldHabit, name)=>{
+    if(!newMap.has(name)) return;
+    const newHabit = newMap.get(name);
+    const changes = describeHabitChanges(oldHabit, newHabit);
+    if(changes.length) changed.push({ name, changes });
+  });
+  return { added, removed, changed };
+}
+
+function describeHabitChanges(oldHabit, newHabit){
+  const changes = [];
+  const oldSeq = isSequence(oldHabit), newSeq = isSequence(newHabit);
+  if(oldSeq !== newSeq){
+    changes.push(newSeq ? T('historyBecameSequence') : T('historyBecameSimple'));
+  } else if(!oldSeq && !newSeq){
+    if(oldHabit.seconds !== newHabit.seconds){
+      changes.push(`${T('historyDuration')} ${fmtMinSec(oldHabit.seconds)} → ${fmtMinSec(newHabit.seconds)}`);
+    }
+    if((oldHabit.voice||'') !== (newHabit.voice||'')) changes.push(T('historyVoiceChanged'));
+    if((oldHabit.midway||'') !== (newHabit.midway||'')) changes.push(T('historyMidwayChanged'));
+  } else if(oldSeq && newSeq){
+    if(oldHabit.subSteps.length !== newHabit.subSteps.length){
+      changes.push(`${T('historySubStepCount')} ${oldHabit.subSteps.length} → ${newHabit.subSteps.length}`);
+    } else if(JSON.stringify(oldHabit.subSteps) !== JSON.stringify(newHabit.subSteps)){
+      changes.push(T('historySubStepsChanged'));
+    }
+  }
+  const oldDays = JSON.stringify((oldHabit.days||[]).slice().sort());
+  const newDays = JSON.stringify((newHabit.days||[]).slice().sort());
+  if(oldDays !== newDays) changes.push(T('historyDaysChanged'));
+  return changes;
+}
+
+async function restoreHistoryEntry(historyIndex){
+  const history = await getHistory();
+  const entry = history[historyIndex];
+  if(!entry) return;
+  if(!confirm(T('historyConfirm'))) return;
+  try{
+    state.routines = JSON.parse(entry.data);
+    migrateRoutines();
+    await saveRoutines(); // records this restore as a new history entry too, and pushes to cloud if synced
+    renderRunner();
+    renderEditor();
+    await renderHistoryCard();
+  }catch(e){}
 }
 
 function switchMode(mode){
