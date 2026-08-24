@@ -156,6 +156,8 @@
   <div class="card" id="importExportCard"></div>
 
   <div class="card" id="historyCard"></div>
+
+  <div class="card" id="timeStatsCard"></div>
 </div>
 
 <script>
@@ -265,7 +267,33 @@ const STR = {
   voicePaused:   { cn:"已暂停。", tw:"已暫停。" },
   voiceResumed:  { cn:"继续。", tw:"繼續。" },
   voiceEnded:    { cn:"日常已结束。", tw:"日常已結束。" },
-  voiceStillGoing:{ cn:"继续进行", tw:"繼續進行" }
+  voiceStillGoing:{ cn:"继续进行", tw:"繼續進行" },
+  overtimeLabel:  { cn:"已超时", tw:"已超時" },
+  timeUpVoice:    { cn:"时间到", tw:"時間到" },
+  timeStatsTitle: { cn:"时间统计", tw:"時間統計" },
+  timeStatsDesc:  { cn:"根据你实际完成日常的记录，看看时间实际花在哪里。", tw:"根據你實際完成日常的記錄，看看時間實際花在哪裡。" },
+  timeStatsEmpty: { cn:"还没有数据。完整跑一遍日常后就会看到统计。", tw:"還沒有資料。完整跑一遍日常後就會看到統計。" },
+  timeStatsSessions:  { cn:"次记录", tw:"次記錄" },
+  timeStatsAvgTotal:  { cn:"平均总时长", tw:"平均總時長" },
+  timeStatsPlanned:   { cn:"计划", tw:"計畫" },
+  timeStatsActual:    { cn:"实际", tw:"實際" },
+  timeStatsOver:      { cn:"超出", tw:"超出" },
+  timeStatsUnder:     { cn:"提前", tw:"提前" },
+  timeStatsOnTime:    { cn:"准时", tw:"準時" },
+  transitionLabel:      { cn:"过渡", tw:"過渡" },
+  transitionTo:         { cn:"前往", tw:"前往" },
+  transitionDefaultVoice: { cn:"过渡时间", tw:"過渡時間" },
+  transitionSecondsPH:  { cn:"过渡时间（秒，0 = 无过渡）", tw:"過渡時間（秒，0 = 無過渡）" },
+  transitionVoicePH:    { cn:"过渡时说的话（可选）", tw:"過渡時說的話（可選）" },
+  timeStatsTransitions: { cn:"过渡时间", tw:"過渡時間" },
+  addSubStepLive:      { cn:"+ 记录新动作", tw:"+ 記錄新動作" },
+  addSubStepLivePrompt:{ cn:"这个动作叫什么？（默认时长30秒，之后可在编辑里调整）", tw:"這個動作叫什麼？（預設時長30秒，之後可在編輯裡調整）" },
+  sequenceTailVoice: { cn:"继续", tw:"繼續" },
+  sequenceTailLabel: { cn:"自由时间（还没有为这段定义具体动作）", tw:"自由時間（還沒有為這段定義具體動作）" },
+  seqOverallDuration: { cn:"总时长", tw:"總時長" },
+  seqAllocated:       { cn:"已分配", tw:"已分配" },
+  seqRemaining:       { cn:"剩余", tw:"剩餘" },
+  noRoomForSubStep:   { cn:"没有剩余时间了，请先增加总时长或缩短其他动作。", tw:"沒有剩餘時間了，請先增加總時長或縮短其他動作。" }
 };
 function T(key){
   const entry = STR[key];
@@ -299,10 +327,23 @@ function fmtMinSec(totalSeconds){
   return `${m}${T('minLabel')}${s}${T('secLabel')}`;
 }
 
-// total duration of a step, in seconds
+// A habit's overall planned duration is always just `seconds` — for both
+// simple habits AND sequences. For a sequence, `seconds` is a fixed budget
+// you set yourself; the sub-steps are a partial (or full) breakdown that
+// must fit inside it, but don't have to use all of it. Whatever's left
+// after the last defined sub-step just continues as unstructured time
+// until you tap Next — see the "sequence tail" handling further down.
 function stepDuration(step){
-  if(!isSequence(step)) return step.seconds||0;
-  return step.subSteps.reduce((a,m)=>a+m.seconds,0);
+  return step.seconds || 0;
+}
+// sum of all currently-defined sub-steps — used to enforce the "can't
+// exceed the overall budget" rule and to compute leftover/unstructured time.
+function subStepsSum(step){
+  return isSequence(step) ? step.subSteps.reduce((a,m)=>a+m.seconds,0) : 0;
+}
+// total duration including the transition period after this habit, if any
+function stepDurationWithTransition(step){
+  return stepDuration(step) + (step.transitionSeconds||0);
 }
 
 let state = {
@@ -321,7 +362,18 @@ let state = {
   subIndex: 0,
   // cross-device cloud sync
   syncCode: null,
-  syncStatus: 'idle' // 'idle' | 'syncing' | 'synced' | 'error'
+  syncStatus: 'idle', // 'idle' | 'syncing' | 'synced' | 'error'
+  // time tracking for the current in-progress run
+  sessionLog: null,   // { mode, startedAt, entries: [{name, plannedSeconds, actualSeconds}] }
+  stepEnteredAt: 0,    // timestamp when the current TOP-LEVEL habit began
+  // transition period between habits
+  inTransition: false,
+  transitionEnteredAt: 0,
+  // "tail" of a sequence: after the last DEFINED sub-step, if the overall
+  // budget has leftover time, it continues as generic/unstructured time
+  // until you tap Next — rather than immediately jumping to the next habit.
+  inSequenceTail: false,
+  sequenceTailTotal: 0
 };
 
 // Persistence: localStorage, since this file runs as a standalone hosted
@@ -466,7 +518,24 @@ function migrateRoutines(){
       if(!Array.isArray(s.days)) s.days = [];
       if(isSequence(s)){
         s.subSteps.forEach(sub=>{ if(typeof sub.voice !== 'string') sub.voice = ""; });
+        // older sequences had no overall budget of their own — their total
+        // WAS just the sum of sub-steps. Backfill that as the budget so
+        // they keep behaving exactly the same (fully packed, no leftover
+        // tail) until the person explicitly changes it.
+        if(typeof s.seconds !== 'number'){
+          s.seconds = subStepsSum(s);
+        }
+      } else {
+        // Single-timer habits are retired — every habit is now sequence-
+        // shaped. Wrap the old habit as a one-move sequence using its
+        // existing name/duration/voice, so nothing is lost; the "midway"
+        // nudge (a simple-habit-only feature) doesn't carry over since
+        // sequences don't use it, but everything else does.
+        s.subSteps = [{ name: s.name, seconds: s.seconds||30, voice: s.voice||"" }];
+        delete s.midway;
       }
+      if(typeof s.transitionSeconds !== 'number') s.transitionSeconds = 0;
+      if(typeof s.transitionVoice !== 'string') s.transitionVoice = "";
     });
   });
 }
@@ -492,6 +561,38 @@ async function saveRoutines(){
 const HISTORY_KEY = "history";
 const HISTORY_LIMIT = 30;
 const HISTORY_MIN_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+
+// ---------- Time tracking (local, per device) ----------
+// Every run of a routine records how long you actually spent on each habit
+// (from the moment it starts until you tap Next) alongside how long you'd
+// planned for it. Kept local-only, like version history, and capped so it
+// doesn't grow forever.
+const TIME_LOG_KEY = "timeLog";
+const TIME_LOG_LIMIT = 100;
+
+async function getTimeLog(){
+  try{
+    const r = await lsGet(TIME_LOG_KEY);
+    if(!r) return [];
+    return JSON.parse(r.value);
+  }catch(e){ return []; }
+}
+async function setTimeLog(list){
+  try{ await lsSet(TIME_LOG_KEY, JSON.stringify(list)); }catch(e){}
+}
+
+async function finalizeSession(){
+  if(!state.sessionLog || state.sessionLog.entries.length === 0){
+    state.sessionLog = null;
+    return;
+  }
+  const log = await getTimeLog();
+  log.push(state.sessionLog);
+  while(log.length > TIME_LOG_LIMIT) log.shift();
+  await setTimeLog(log);
+  state.sessionLog = null;
+  renderTimeStatsCard();
+}
 
 async function getHistory(){
   try{
@@ -574,6 +675,16 @@ let currentAzureAudio = null;
 // Natural-voice speak for step announcements. Falls back to the local
 // browser voice automatically if the Azure call fails (bad connection,
 // CORS, quota, etc.) so a habit is never silently skipped.
+//
+// Safety net: mobile browsers (iOS Safari especially) can silently block
+// BOTH the Azure audio and the local speechSynthesis fallback — autoplay/
+// gesture restrictions can suppress playback without ever firing an
+// "ended" or "error" event on either path. Since the countdown timer only
+// starts once speech finishes, a silent failure like that would otherwise
+// leave the whole app stuck forever with a dead timer and no sound at all,
+// which is exactly the bug this fixes: if nothing signals "done" within a
+// few seconds, we force it ourselves so the routine keeps moving no matter
+// what the browser silently swallowed.
 function speak(text, onend){
   if(currentAzureAudio){
     try{ currentAzureAudio.pause(); }catch(e){}
@@ -581,16 +692,34 @@ function speak(text, onend){
   }
   try{ window.speechSynthesis.cancel(); }catch(e){}
 
+  let finished = false;
+  const finish = ()=>{
+    if(finished) return;
+    finished = true;
+    if(onend) onend();
+  };
+
+  if(onend){
+    // Roughly scales with how long the line is, capped at 8s so it never
+    // waits an unreasonable amount of time even for a long voice line.
+    const watchdogMs = Math.min(8000, 1500 + text.length * 150);
+    setTimeout(finish, watchdogMs);
+  }
+
   synthesizeAzure(text, state.locale).then(url=>{
+    if(finished) return; // watchdog already moved on — don't start late audio
     const audio = new Audio(url);
     currentAzureAudio = audio;
     if(onend){
-      audio.onended = onend;
-      audio.onerror = ()=>speakLocalFallback(text, onend, "Azure audio playback failed");
+      audio.onended = finish;
+      audio.onerror = ()=>speakLocalFallback(text, finish, "Azure audio playback failed");
     }
-    audio.play().catch(err=>speakLocalFallback(text, onend, "Azure audio play() rejected: " + err));
+    audio.play().catch(err=>{
+      if(!finished) speakLocalFallback(text, onend ? finish : null, "Azure audio play() rejected: " + err);
+    });
   }).catch(err=>{
-    speakLocalFallback(text, onend, "Azure request failed: " + err);
+    if(finished) return;
+    speakLocalFallback(text, onend ? finish : null, "Azure request failed: " + err);
   });
 }
 
@@ -605,7 +734,6 @@ function speakLocalFallback(text, onend, reason){
       u.onerror = onend;
     }
     window.speechSynthesis.speak(u);
-    if(onend && !('speechSynthesis' in window)) onend();
   }catch(e){ if(onend) onend(); }
 }
 
@@ -654,6 +782,7 @@ function renderChrome(){
   renderSyncCard();
   renderImportExportCard();
   renderHistoryCard();
+  renderTimeStatsCard();
 }
 
 function renderSyncCard(){
@@ -742,6 +871,108 @@ async function importRoutines(){
   }catch(e){
     if(statusEl) statusEl.textContent = T('importFailed');
   }
+}
+
+// ---------- Time stats aggregation ----------
+function aggregateTimeStats(timeLog, mode){
+  const sessions = timeLog.filter(s=>s.mode===mode);
+  const habitMap = new Map();       // name -> {sumPlanned, sumActual, count}  — habit time only
+  const transitionMap = new Map();  // name -> {sumPlanned, sumActual, count}  — transition time only, kept separate
+  let sumSessionPlanned = 0, sumSessionActual = 0;
+  sessions.forEach(session=>{
+    let sessionPlanned = 0, sessionActual = 0;
+    session.entries.forEach(e=>{
+      sessionPlanned += e.plannedSeconds;
+      sessionActual += e.actualSeconds;
+      // entries logged before this feature existed have no `type` — treat
+      // those as habit time, since that's what they were.
+      const targetMap = e.type === 'transition' ? transitionMap : habitMap;
+      if(!targetMap.has(e.name)) targetMap.set(e.name, { sumPlanned:0, sumActual:0, count:0 });
+      const h = targetMap.get(e.name);
+      h.sumPlanned += e.plannedSeconds;
+      h.sumActual += e.actualSeconds;
+      h.count += 1;
+    });
+    sumSessionPlanned += sessionPlanned;
+    sumSessionActual += sessionActual;
+  });
+  const toSortedList = (map)=>{
+    const list = [...map.entries()].map(([name, h])=>({
+      name,
+      avgPlanned: h.sumPlanned / h.count,
+      avgActual: h.sumActual / h.count,
+      count: h.count
+    }));
+    list.sort((a,b)=> (b.avgActual-b.avgPlanned) - (a.avgActual-a.avgPlanned));
+    return list;
+  };
+  return {
+    sessionCount: sessions.length,
+    avgTotalPlanned: sessions.length ? sumSessionPlanned/sessions.length : 0,
+    avgTotalActual: sessions.length ? sumSessionActual/sessions.length : 0,
+    habits: toSortedList(habitMap),
+    transitions: toSortedList(transitionMap)
+  };
+}
+
+function renderTimeStatRow(h, maxVal){
+  const delta = h.avgActual - h.avgPlanned;
+  const deltaLabel = delta > 5 ? `${T('timeStatsOver')} ${fmtMinSec(Math.round(delta))}`
+                    : delta < -5 ? `${T('timeStatsUnder')} ${fmtMinSec(Math.round(-delta))}`
+                    : T('timeStatsOnTime');
+  const deltaColor = delta > 5 ? 'var(--warn)' : (delta < -5 ? 'var(--good)' : 'var(--sub)');
+  const actualPct = Math.min(100, (h.avgActual/maxVal)*100);
+  return `
+    <div style="margin-bottom:10px;">
+      <div class="steprow-top" style="justify-content:space-between;">
+        <span class="small">${escapeHtml(h.name)}</span>
+        <span class="small" style="color:${deltaColor};">${deltaLabel}</span>
+      </div>
+      <div style="background:var(--line);border-radius:5px;height:8px;position:relative;overflow:hidden;">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${actualPct}%;background:${delta>5?'var(--warn)':'var(--accent)'};"></div>
+      </div>
+      <p class="small" style="margin:2px 0 0;">${T('timeStatsActual')} ${fmtMinSec(Math.round(h.avgActual))} · ${T('timeStatsPlanned')} ${fmtMinSec(Math.round(h.avgPlanned))}</p>
+    </div>
+  `;
+}
+
+async function renderTimeStatsCard(){
+  const card = document.getElementById('timeStatsCard');
+  if(!card) return;
+  const timeLog = await getTimeLog();
+  let html = `
+    <p class="section-title" style="margin:0 0 8px;">${T('timeStatsTitle')}</p>
+    <p class="small" style="margin:0 0 10px;">${T('timeStatsDesc')}</p>
+  `;
+  if(timeLog.length === 0){
+    html += `<p class="small">${T('timeStatsEmpty')}</p>`;
+    card.innerHTML = html;
+    return;
+  }
+  ['morning','night'].forEach(mode=>{
+    const stats = aggregateTimeStats(timeLog, mode);
+    if(stats.sessionCount === 0) return;
+    const modeLabel = mode==='morning' ? T('tabMorning') : T('tabNight');
+    html += `
+      <div style="margin-bottom:14px;">
+        <p style="font-weight:500;margin:10px 0 2px;">${modeLabel} · ${stats.sessionCount} ${T('timeStatsSessions')}</p>
+        <p class="small" style="margin:0 0 10px;">${T('timeStatsAvgTotal')}：${fmtMinSec(Math.round(stats.avgTotalActual))}（${T('timeStatsPlanned')} ${fmtMinSec(Math.round(stats.avgTotalPlanned))}）</p>
+    `;
+    if(stats.habits.length){
+      const maxVal = Math.max(...stats.habits.map(h=>Math.max(h.avgPlanned,h.avgActual)), 1);
+      stats.habits.forEach(h=>{ html += renderTimeStatRow(h, maxVal); });
+    }
+    // Transitions get their own clearly separate section — kept apart from
+    // habit numbers on purpose, so a slow transition never reads as a habit
+    // "running long."
+    if(stats.transitions.length){
+      const maxValT = Math.max(...stats.transitions.map(h=>Math.max(h.avgPlanned,h.avgActual)), 1);
+      html += `<p class="small" style="font-weight:500;margin:12px 0 6px;">${T('timeStatsTransitions')}</p>`;
+      stats.transitions.forEach(h=>{ html += renderTimeStatRow(h, maxValT); });
+    }
+    html += `</div>`;
+  });
+  card.innerHTML = html;
 }
 
 async function renderHistoryCard(){
@@ -898,7 +1129,7 @@ function renderRunner(){
   const dayFull = DAY_FULL[state.locale];
 
   if(!state.running){
-    const totalSec = steps.reduce((a,s)=>a+stepDuration(s),0);
+    const totalSec = steps.reduce((a,s)=>a+stepDurationWithTransition(s),0);
     const modeLabel = state.mode==='morning' ? T('tabMorning') : T('tabNight');
     if(allSteps.length === 0){
       card.innerHTML = `
@@ -931,12 +1162,89 @@ function renderRunner(){
   }
 
   const step = steps[state.currentIndex];
+
+  if(state.inTransition){
+    const overtime = state.remaining < 0;
+    const total = step.transitionSeconds || 1;
+    const pct = overtime ? 0 : (state.remaining/total);
+    const r = 80, c = 2*Math.PI*r;
+    const offset = c * (1-pct);
+    const ringLabelText = overtime ? ('+' + fmtTime(-state.remaining)) : fmtTime(state.remaining);
+    const ringColor = overtime ? 'var(--warn)' : 'var(--accent)';
+    const nextHabit = steps[state.currentIndex+1];
+    const nextLabel = nextHabit ? `${T('transitionTo')} ${nextHabit.name}` : '';
+    card.innerHTML = `
+      <div class="runner-header">
+        <span class="stepcount">${T('transitionLabel')}</span>
+        <span class="stepcount">${state.mode==='morning' ? T('tabMorning') : T('tabNight')}</span>
+      </div>
+      <div class="stepname">${T('transitionLabel')}</div>
+      <p class="stepdetail">${nextLabel}</p>
+      <div class="ring-wrap">
+        <div class="ring-container">
+          <svg width="180" height="180" viewBox="0 0 180 180">
+            <circle class="ring-bg" cx="90" cy="90" r="${r}"></circle>
+            <circle class="ring-fg" cx="90" cy="90" r="${r}"
+              stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="stroke:${ringColor};"></circle>
+          </svg>
+          <div class="ring-label" style="color:${overtime ? 'var(--warn)' : ''};">${ringLabelText}</div>
+        </div>
+      </div>
+      <div class="rowbtns">
+        <button onclick="prevStep()">${T('back')}</button>
+        <button onclick="togglePause()">${state.paused ? T('resume') : T('pause')}</button>
+        <button onclick="nextStep()">${T('next')}</button>
+        <button class="ghost" onclick="stopRun(true)">${T('end')}</button>
+      </div>
+    `;
+    return;
+  }
+
+  if(state.inSequenceTail){
+    const overtime = state.remaining < 0;
+    const total = state.sequenceTailTotal || 1;
+    const pct = overtime ? 0 : (state.remaining/total);
+    const r = 80, c = 2*Math.PI*r;
+    const offset = c * (1-pct);
+    const ringLabelText = overtime ? ('+' + fmtTime(-state.remaining)) : fmtTime(state.remaining);
+    const ringColor = overtime ? 'var(--warn)' : 'var(--accent)';
+    const modeLabel = state.mode==='morning' ? T('tabMorning') : T('tabNight');
+    card.innerHTML = `
+      <div class="runner-header">
+        <span class="stepcount">${T('habitOf')} ${state.currentIndex+1} ${T('habitOfMid')} ${steps.length} ${T('habitOfEnd')}</span>
+        <span class="stepcount">${modeLabel}</span>
+      </div>
+      <div class="stepname">${step.name}</div>
+      <p class="stepdetail">${T('sequenceTailLabel')}</p>
+      <div class="ring-wrap">
+        <div class="ring-container">
+          <svg width="180" height="180" viewBox="0 0 180 180">
+            <circle class="ring-bg" cx="90" cy="90" r="${r}"></circle>
+            <circle class="ring-fg" cx="90" cy="90" r="${r}"
+              stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="stroke:${ringColor};"></circle>
+          </svg>
+          <div class="ring-label" style="color:${overtime ? 'var(--warn)' : ''};">${ringLabelText}</div>
+        </div>
+      </div>
+      <div class="rowbtns">
+        <button onclick="prevStep()">${T('back')}</button>
+        <button onclick="togglePause()">${state.paused ? T('resume') : T('pause')}</button>
+        <button onclick="nextStep()">${T('next')}</button>
+        <button class="ghost" onclick="stopRun(true)">${T('end')}</button>
+      </div>
+    `;
+    return;
+  }
+
   const inSeq = isSequence(step);
   const activeUnit = inSeq ? state.subQueue[state.subIndex] : step;
   const total = activeUnit.seconds;
-  const pct = total > 0 ? (state.remaining/total) : 0;
+  const overtime = state.remaining < 0;
+  const pct = overtime ? 0 : (total > 0 ? (state.remaining/total) : 0);
   const r = 80, c = 2*Math.PI*r;
   const offset = c * (1-pct);
+  const ringLabelText = overtime ? ('+' + fmtTime(-state.remaining)) : fmtTime(state.remaining);
+  const ringColor = overtime ? 'var(--warn)' : 'var(--accent)';
 
   const subProgress = inSeq
     ? `<p class="stepdetail" style="margin-top:-6px;">${activeUnit.name} · ${T('subStepOf')} ${state.subIndex+1} ${T('subStepOfMid')} ${state.subQueue.length} ${T('subStepOfEnd')}</p>`
@@ -956,9 +1264,9 @@ function renderRunner(){
         <svg width="180" height="180" viewBox="0 0 180 180">
           <circle class="ring-bg" cx="90" cy="90" r="${r}"></circle>
           <circle class="ring-fg" cx="90" cy="90" r="${r}"
-            stroke-dasharray="${c}" stroke-dashoffset="${offset}"></circle>
+            stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="stroke:${ringColor};"></circle>
         </svg>
-        <div class="ring-label">${fmtTime(state.remaining)}</div>
+        <div class="ring-label" style="color:${overtime ? 'var(--warn)' : ''};">${ringLabelText}</div>
       </div>
     </div>
     <div class="rowbtns">
@@ -978,6 +1286,7 @@ function startRun(){
   state.running = true;
   state.paused = false;
   state.currentIndex = 0;
+  state.sessionLog = { mode: state.mode, startedAt: Date.now(), entries: [] };
   loadStep();
 }
 
@@ -987,10 +1296,13 @@ function loadStep(){
     clearInterval(state.timerId);
     speak(T('voiceComplete'));
     renderRunner();
+    finalizeSession();
     return;
   }
   const step = steps[state.currentIndex];
   clearInterval(state.timerId);
+  state.stepEnteredAt = Date.now();
+  state.inSequenceTail = false;
   if(isSequence(step)){
     state.subQueue = step.subSteps;
     state.subIndex = 0;
@@ -1029,34 +1341,39 @@ function tick(){
   state.remaining--;
   const stepEl = document.querySelector('.ring-label');
   const fgEl = document.querySelector('.ring-fg');
-  if(stepEl) stepEl.textContent = fmtTime(Math.max(state.remaining,0));
+  const overtime = state.remaining < 0;
+  if(stepEl){
+    stepEl.textContent = overtime ? ('+' + fmtTime(-state.remaining)) : fmtTime(state.remaining);
+    stepEl.style.color = overtime ? 'var(--warn)' : '';
+  }
+  const step = state.activeSteps[state.currentIndex];
   if(fgEl){
-    const step = state.activeSteps[state.currentIndex];
-    const activeUnit = isSequence(step) ? state.subQueue[state.subIndex] : step;
-    const total = activeUnit.seconds || 1;
-    const pct = Math.max(state.remaining,0)/total;
+    const total = state.inTransition ? (step.transitionSeconds || 1)
+      : state.inSequenceTail ? (state.sequenceTailTotal || 1)
+      : ((isSequence(step) ? state.subQueue[state.subIndex] : step).seconds || 1);
+    const pct = overtime ? 0 : (state.remaining/total);
     const r = 80, c = 2*Math.PI*r;
     fgEl.setAttribute('stroke-dashoffset', c*(1-pct));
+    fgEl.style.stroke = overtime ? 'var(--warn)' : '';
   }
-  // gentle midway nudge (simple steps only)
-  const step = state.activeSteps[state.currentIndex];
+  // gentle midway nudge (simple habits only — never during a transition or tail)
   let midwaySpoke = false;
-  if(!isSequence(step) && step.seconds > 40 && state.remaining === Math.floor(step.seconds/2)){
+  if(!state.inTransition && !state.inSequenceTail && !isSequence(step) && step.seconds > 40 && state.remaining === Math.floor(step.seconds/2)){
     const msg = step.midway && step.midway.trim() ? step.midway : `${T('voiceStillGoing')}：${step.name}`;
     flashOffCourse(msg);
     if(step.midway && step.midway.trim()){ speak(step.midway); midwaySpoke = true; }
   }
-  // audible countdown, spoken every 5 seconds for the full duration
-  if(!midwaySpoke && state.remaining >= 1 && state.remaining % 5 === 0){
-    speakCountdownNumber(state.remaining);
-  }
-  if(state.remaining <= 0){
-    clearInterval(state.timerId);
-    if(isSequence(step) && state.subIndex < state.subQueue.length-1){
-      state.subIndex++;
-      loadSubUnit(false);
-    } else {
-      nextStep();
+  // audible countdown, spoken every 5 seconds — counts down normally, then
+  // counts UP as "overtime" once past zero. Auto-advance is intentionally
+  // gone: the timer is a pace-keeping signal, not something that yanks you
+  // forward. You always move on yourself, with Next.
+  if(!midwaySpoke){
+    if(state.remaining === 0){
+      speak(T('timeUpVoice'));
+    } else if(state.remaining >= 1 && state.remaining % 5 === 0){
+      speakCountdownNumber(state.remaining);
+    } else if(overtime && (-state.remaining) % 5 === 0){
+      speak(`${T('overtimeLabel')} ${fmtMinSec(-state.remaining)}`);
     }
   }
 }
@@ -1069,15 +1386,117 @@ function flashOffCourse(msg){
   setTimeout(()=>el.classList.remove('show'), 2500);
 }
 
+// Next/Back are sequence-aware: inside a guided sequence, they move one
+// sub-step at a time rather than skipping the whole habit. After the last
+// DEFINED sub-step, if the habit's overall budget still has time left, that
+// leftover continues as generic/unstructured time (the "tail") until you
+// tap Next again — it doesn't just skip ahead once you run out of named
+// moves. Only once that's all done does it move to the next top-level
+// habit, via a transition first if one's configured.
 function nextStep(){
   clearInterval(state.timerId);
-  state.currentIndex++;
-  loadStep();
+
+  // If we're currently in a transition, finishing it logs the transition's
+  // own actual time (kept completely separate from habit time) and moves
+  // into the actual next habit.
+  if(state.inTransition){
+    const finishedStep = state.activeSteps[state.currentIndex];
+    if(finishedStep && state.sessionLog){
+      const actualSeconds = Math.round((Date.now() - state.transitionEnteredAt) / 1000);
+      state.sessionLog.entries.push({
+        name: `${finishedStep.name} → ${T('transitionLabel')}`,
+        plannedSeconds: finishedStep.transitionSeconds || 0,
+        actualSeconds,
+        type: 'transition'
+      });
+    }
+    state.inTransition = false;
+    state.currentIndex++;
+    loadStep();
+    return;
+  }
+
+  const step = state.activeSteps[state.currentIndex];
+
+  if(state.inSequenceTail){
+    // finishing the generic leftover time — fall through to the normal
+    // "top-level habit is done" logic below.
+    state.inSequenceTail = false;
+  } else if(step && isSequence(step) && state.subIndex < state.subQueue.length - 1){
+    state.subIndex++;
+    loadSubUnit(false);
+    return;
+  } else if(step && isSequence(step)){
+    const leftover = stepDuration(step) - subStepsSum(step);
+    if(leftover > 0){
+      startSequenceTail(leftover);
+      return;
+    }
+  }
+
+  // finishing a top-level habit — log actual vs planned time for it
+  if(step && state.sessionLog){
+    const actualSeconds = Math.round((Date.now() - state.stepEnteredAt) / 1000);
+    state.sessionLog.entries.push({
+      name: step.name,
+      plannedSeconds: stepDuration(step),
+      actualSeconds,
+      type: 'habit'
+    });
+  }
+
+  if(step && step.transitionSeconds > 0){
+    startTransition(step);
+  } else {
+    state.currentIndex++;
+    loadStep();
+  }
 }
+
+function startSequenceTail(leftoverSeconds){
+  clearInterval(state.timerId);
+  state.inSequenceTail = true;
+  state.sequenceTailTotal = leftoverSeconds;
+  state.remaining = leftoverSeconds;
+  renderRunner();
+  speak(T('sequenceTailVoice'), startTimer);
+}
+
+function startTransition(finishedStep){
+  clearInterval(state.timerId);
+  state.inTransition = true;
+  state.transitionEnteredAt = Date.now();
+  state.remaining = finishedStep.transitionSeconds;
+  renderRunner();
+  const line = finishedStep.transitionVoice && finishedStep.transitionVoice.trim()
+    ? finishedStep.transitionVoice
+    : T('transitionDefaultVoice');
+  speak(line, startTimer);
+}
+
 function prevStep(){
   clearInterval(state.timerId);
-  state.currentIndex = Math.max(0, state.currentIndex-1);
-  loadStep();
+  if(state.inTransition){
+    // "back" out of a transition just re-does the habit that led into it —
+    // the transition hasn't advanced currentIndex yet, so this is simple.
+    state.inTransition = false;
+    loadStep();
+    return;
+  }
+  if(state.inSequenceTail){
+    // back out of the leftover-time tail into the last defined sub-step
+    state.inSequenceTail = false;
+    loadSubUnit(false);
+    return;
+  }
+  const step = state.activeSteps[state.currentIndex];
+  if(step && isSequence(step) && state.subIndex > 0){
+    state.subIndex--;
+    loadSubUnit(false);
+  } else if(state.currentIndex > 0){
+    state.currentIndex--;
+    loadStep();
+  }
 }
 function togglePause(){
   state.paused = !state.paused;
@@ -1091,6 +1510,7 @@ function stopRun(announce){
   state.currentIndex = 0;
   if(announce) speak(T('voiceEnded'));
   renderRunner();
+  finalizeSession(); // saves whatever habits were completed before ending early
 }
 
 // ---------- Editor ----------
@@ -1111,7 +1531,6 @@ function renderEditor(){
   let html = `<ul class="steplist" id="steplist" style="list-style:none;margin:0;padding:0;">`;
   steps.forEach((s,i)=>{
     const everyDay = !s.days || s.days.length===0;
-    const seq = isSequence(s);
     html += `
       <li class="steprow">
         <div class="steprow-top">
@@ -1122,31 +1541,18 @@ function renderEditor(){
           <input type="text" value="${escapeHtml(s.name)}" oninput="updateStep(${i},'name',this.value)" placeholder="${T('habitNamePH')}">
           <button class="del" onclick="deleteStep(${i})">${T('remove')}</button>
         </div>
+        ${renderSeqEditor(i,s)}
         <div class="steprow-top">
-          <span class="small" style="min-width:70px;">${T('type')}</span>
-          <div class="habittype">
-            <button type="button" class="typebtn ${!seq?'on':''}" onclick="setHabitType(${i},false)">${T('singleTimer')}</button>
-            <button type="button" class="typebtn ${seq?'on':''}" onclick="setHabitType(${i},true)">${T('sequence')}</button>
-          </div>
+          <span class="small" style="min-width:70px;">${T('transitionLabel')}</span>
+          <input type="number" min="0" step="5" value="${Math.round(s.transitionSeconds||0)}" oninput="updateStep(${i},'transitionSeconds',this.value)">
+          <span class="unit">${T('sec')}</span>
+          <span class="small" id="transitionLabel-${i}">(${fmtMinSec(Math.round(s.transitionSeconds||0))})</span>
         </div>
-        ${seq ? renderSeqEditor(i,s) : `
-          <div class="steprow-top">
-            <span class="small" style="min-width:70px;">${T('duration')}</span>
-            <input type="number" min="5" step="5" value="${Math.round(s.seconds)}" oninput="updateStep(${i},'seconds',this.value)">
-            <span class="unit">${T('sec')}</span>
-            <span class="small" id="durationLabel-${i}">(${fmtMinSec(Math.round(s.seconds))})</span>
-          </div>
-          <div class="steprow-top">
-            <input type="text" style="flex:1;" value="${escapeHtml(s.voice||'')}"
-              oninput="updateStep(${i},'voice',this.value)"
-              placeholder="${T('voiceStartPH')}">
-          </div>
-          <div class="steprow-top">
-            <input type="text" style="flex:1;" value="${escapeHtml(s.midway||'')}"
-              oninput="updateStep(${i},'midway',this.value)"
-              placeholder="${T('midwayPH')}">
-          </div>
-        `}
+        <div class="steprow-top">
+          <input type="text" style="flex:1;" value="${escapeHtml(s.transitionVoice||'')}"
+            oninput="updateStep(${i},'transitionVoice',this.value)"
+            placeholder="${T('transitionVoicePH')}">
+        </div>
         <div class="steprow-top">
           <div class="daypicker">
             ${dayLabels.map((lbl,d)=>`
@@ -1159,13 +1565,13 @@ function renderEditor(){
       </li>`;
   });
   html += `</ul>
-    <button class="addbtn" onclick="addStep()">${T('addHabit')}</button>
-    <p class="small" style="margin-top:10px;">${T('typeHelp')}</p>`;
+    <button class="addbtn" onclick="addStep()">${T('addHabit')}</button>`;
   body.innerHTML = html;
 }
 
 function renderSeqEditor(i, s){
-  const total = stepDuration(s);
+  const used = subStepsSum(s);
+  const remaining = Math.max(0, (s.seconds||0) - used);
   let subs = s.subSteps.map((m,mi)=>`
     <div class="blocksub">
       <div class="reorderbtns">
@@ -1174,7 +1580,7 @@ function renderSeqEditor(i, s){
       </div>
       <input type="text" class="substepname" style="flex:1;" value="${escapeHtml(m.name)}"
         oninput="updateSubStep(${i},${mi},'name',this.value)" placeholder="${T('subStepNamePH')}">
-      <input type="number" min="5" step="5" value="${m.seconds}"
+      <input type="number" min="5" step="5" value="${m.seconds}" id="subSecondsInput-${i}-${mi}"
         oninput="updateSubStep(${i},${mi},'seconds',this.value)">
       <span class="unit">${T('sec')}</span>
       <span class="small" id="subDurationLabel-${i}-${mi}">(${fmtMinSec(m.seconds)})</span>
@@ -1188,10 +1594,18 @@ function renderSeqEditor(i, s){
   `).join('');
   return `
     <div class="seqbox">
+      <div class="steprow-top">
+        <span class="small" style="min-width:70px;">${T('seqOverallDuration')}</span>
+        <input type="number" min="5" step="5" value="${Math.round(s.seconds||0)}" id="seqOverallInput-${i}"
+          oninput="updateSeqOverallSeconds(${i}, this.value)">
+        <span class="unit">${T('sec')}</span>
+        <span class="small">(${fmtMinSec(Math.round(s.seconds||0))})</span>
+      </div>
+      <p class="small" style="margin:0 0 10px;">${T('seqAllocated')} ${fmtMinSec(used)} · ${T('seqRemaining')} ${fmtMinSec(remaining)}</p>
       <p class="small" style="margin:0 0 8px;">${T('subStepsOrder')}</p>
       ${subs}
       <button type="button" style="margin:4px 0 10px;" onclick="addSubStep(${i})">${T('addSubStep')}</button>
-      <p class="seqtotal" id="seqTotal-${i}">${T('total')} ${Math.round(total/60*10)/10} ${T('min')}</p>
+      <p class="seqtotal" id="seqTotal-${i}">${T('seqAllocated')} ${fmtMinSec(subStepsSum(s))} / ${T('seqOverallDuration')} ${fmtMinSec(s.seconds||0)}</p>
     </div>
   `;
 }
@@ -1199,20 +1613,48 @@ function renderSeqEditor(i, s){
 function updateSubStep(i, mi, field, value){
   const step = state.routines[state.mode][i];
   const sub = step.subSteps[mi];
-  if(field==='seconds') sub.seconds = Math.max(5, parseInt(value)||5);
-  else sub[field] = value;
+  if(field==='seconds'){
+    let newVal = Math.max(5, parseInt(value)||5);
+    // cap so the defined sub-steps never exceed the habit's overall budget
+    const othersSum = step.subSteps.reduce((a,m,idx)=> idx===mi ? a : a+m.seconds, 0);
+    const maxAllowed = Math.max(5, (step.seconds||0) - othersSum);
+    if(newVal > maxAllowed) newVal = maxAllowed;
+    sub.seconds = newVal;
+  } else {
+    sub[field] = value;
+  }
   saveRoutines();
   if(field==='seconds'){
-    // patch just this row's label + the sequence total, without re-rendering
-    // the whole editor (which would knock the input out of focus mid-type)
+    // patch just this row's label + the allocated/remaining line, without
+    // re-rendering the whole editor (which would knock the input out of
+    // focus mid-type)
     const labelEl = document.getElementById(`subDurationLabel-${i}-${mi}`);
     if(labelEl) labelEl.textContent = `(${fmtMinSec(sub.seconds)})`;
+    const inputEl = document.getElementById(`subSecondsInput-${i}-${mi}`);
+    if(inputEl) inputEl.value = sub.seconds; // reflect any clamping back into the field
     const totalEl = document.getElementById(`seqTotal-${i}`);
-    if(totalEl) totalEl.textContent = `${T('total')} ${Math.round(stepDuration(step)/60*10)/10} ${T('min')}`;
+    if(totalEl) totalEl.textContent = `${T('seqAllocated')} ${fmtMinSec(subStepsSum(step))} / ${T('seqOverallDuration')} ${fmtMinSec(step.seconds||0)}`;
   }
 }
+function updateSeqOverallSeconds(i, value){
+  const step = state.routines[state.mode][i];
+  const used = subStepsSum(step);
+  let newVal = Math.max(5, parseInt(value)||5);
+  if(newVal < used) newVal = used; // can't shrink below what's already allocated to defined moves
+  step.seconds = newVal;
+  saveRoutines();
+  const inputEl = document.getElementById(`seqOverallInput-${i}`);
+  if(inputEl) inputEl.value = step.seconds;
+  const totalEl = document.getElementById(`seqTotal-${i}`);
+  if(totalEl) totalEl.textContent = `${T('seqAllocated')} ${fmtMinSec(used)} / ${T('seqOverallDuration')} ${fmtMinSec(step.seconds)}`;
+}
 function addSubStep(i){
-  state.routines[state.mode][i].subSteps.push({name:T('newSubStep'), seconds:30, voice:""});
+  const step = state.routines[state.mode][i];
+  const used = subStepsSum(step);
+  const room = (step.seconds||0) - used;
+  if(room < 5){ alert(T('noRoomForSubStep')); return; }
+  const dur = Math.min(30, room);
+  step.subSteps.push({name:T('newSubStep'), seconds:dur, voice:""});
   saveRoutines(); renderEditor();
 }
 function removeSubStep(i, mi){
@@ -1220,21 +1662,6 @@ function removeSubStep(i, mi){
   if(steps.length<=1) return;
   steps.splice(mi,1);
   saveRoutines(); renderEditor();
-}
-
-function setHabitType(i, toSequence){
-  const step = state.routines[state.mode][i];
-  if(toSequence && !isSequence(step)){
-    step.subSteps = [{name:step.name, seconds:step.seconds||30, voice:""}];
-  } else if(!toSequence && isSequence(step)){
-    step.seconds = stepDuration(step);
-    delete step.subSteps;
-    if(!('voice' in step)) step.voice = "";
-    if(!('midway' in step)) step.midway = "";
-  }
-  saveRoutines();
-  renderEditor();
-  if(!state.running) renderRunner();
 }
 
 function moveStep(i, dir){
@@ -1273,6 +1700,8 @@ function updateStep(i, field, value){
   const steps = state.routines[state.mode];
   if(field==='seconds'){
     steps[i][field] = Math.max(5, parseInt(value)||5);
+  } else if(field==='transitionSeconds'){
+    steps[i][field] = Math.max(0, parseInt(value)||0);
   } else {
     steps[i][field] = value;
   }
@@ -1284,9 +1713,21 @@ function updateStep(i, field, value){
     const labelEl = document.getElementById(`durationLabel-${i}`);
     if(labelEl) labelEl.textContent = `(${fmtMinSec(steps[i].seconds)})`;
   }
+  if(field==='transitionSeconds'){
+    const labelEl = document.getElementById(`transitionLabel-${i}`);
+    if(labelEl) labelEl.textContent = `(${fmtMinSec(steps[i].transitionSeconds)})`;
+  }
 }
 function addStep(){
-  state.routines[state.mode].push({name:T('newHabit'), seconds:60, voice:"", midway:"", days:[]});
+  state.routines[state.mode].push({
+    name: T('newHabit'),
+    seconds: 60,
+    voice: "",
+    days: [],
+    transitionSeconds: 0,
+    transitionVoice: "",
+    subSteps: [{ name: T('newSubStep'), seconds: 60, voice: "" }]
+  });
   saveRoutines();
   renderEditor();
 }
