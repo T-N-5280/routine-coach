@@ -1246,7 +1246,7 @@ function renderRunner(){
   const ringLabelText = overtime ? ('+' + fmtTime(-state.remaining)) : fmtTime(state.remaining);
   const ringColor = overtime ? 'var(--warn)' : 'var(--accent)';
 
-  const subProgress = inSeq
+  const subProgress = (inSeq && state.subQueue.length > 1)
     ? `<p class="stepdetail" style="margin-top:-6px;">${activeUnit.name} · ${T('subStepOf')} ${state.subIndex+1} ${T('subStepOfMid')} ${state.subQueue.length} ${T('subStepOfEnd')}</p>`
     : '';
 
@@ -1330,7 +1330,14 @@ function loadSubUnit(announceHabitFirst){
   const line = unit.voice && unit.voice.trim() ? unit.voice : unit.name;
   if(announceHabitFirst){
     const intro = step.voice && step.voice.trim() ? step.voice : step.name;
-    speak(`${intro}。${T('voiceFirst')}：${line}`, startTimer);
+    if(state.subQueue.length === 1){
+      // Only one sub-step exists (habit hasn't been broken down yet) — no
+      // "first step" framing needed since there's nothing else to be first
+      // of. Just announce the habit itself, same as any other habit.
+      speak(intro, startTimer);
+    } else {
+      speak(`${intro}。${T('voiceFirst')}：${line}`, startTimer);
+    }
   } else {
     speak(line, startTimer);
   }
@@ -1474,18 +1481,54 @@ function startTransition(finishedStep){
   speak(line, startTimer);
 }
 
+// Back button behavior: a single press restarts whatever's currently
+// playing (sub-step, the leftover "free time" tail, or a transition) from
+// the beginning. Pressing it again shortly after (within a couple of
+// seconds — the classic "double-tap to skip back" pattern from music
+// players) goes one step further back instead, restarting that. This also
+// naturally handles the edge case of being on the very first sub-step of
+// the very first habit — with nowhere earlier to go, it just restarts the
+// current one instead of freezing (the bug from before).
+let lastBackPressTime = 0;
+const BACK_DOUBLE_PRESS_WINDOW_MS = 2000;
+
 function prevStep(){
+  const now = Date.now();
+  const isDoublePress = (now - lastBackPressTime) < BACK_DOUBLE_PRESS_WINDOW_MS;
+  lastBackPressTime = now;
+  if(isDoublePress){
+    moveToPreviousUnit();
+  } else {
+    restartCurrentUnit();
+  }
+}
+
+function restartCurrentUnit(){
   clearInterval(state.timerId);
   if(state.inTransition){
-    // "back" out of a transition just re-does the habit that led into it —
-    // the transition hasn't advanced currentIndex yet, so this is simple.
+    startTransition(state.activeSteps[state.currentIndex]);
+  } else if(state.inSequenceTail){
+    startSequenceTail(state.sequenceTailTotal);
+  } else {
+    // announce with the "first step" framing only if this really is the
+    // first sub-step of the habit
+    loadSubUnit(state.subIndex === 0);
+  }
+}
+
+function moveToPreviousUnit(){
+  clearInterval(state.timerId);
+  if(state.inTransition){
+    // a transition hasn't advanced currentIndex yet, so "previous" from
+    // here is simply the habit that led into it — restart that.
     state.inTransition = false;
     loadStep();
     return;
   }
   if(state.inSequenceTail){
-    // back out of the leftover-time tail into the last defined sub-step
+    // "previous" from the free-time tail is the last defined sub-step
     state.inSequenceTail = false;
+    state.subIndex = state.subQueue.length - 1;
     loadSubUnit(false);
     return;
   }
@@ -1493,10 +1536,15 @@ function prevStep(){
   if(step && isSequence(step) && state.subIndex > 0){
     state.subIndex--;
     loadSubUnit(false);
-  } else if(state.currentIndex > 0){
+    return;
+  }
+  if(state.currentIndex > 0){
     state.currentIndex--;
     loadStep();
+    return;
   }
+  // nothing earlier exists at all — just restart the current one
+  loadSubUnit(true);
 }
 function togglePause(){
   state.paused = !state.paused;
@@ -1757,6 +1805,34 @@ window.addEventListener('focus', backgroundSyncCheck);
 // Backup: also check periodically while the app is left open, in case
 // focus/visibility events don't fire reliably on a given device.
 setInterval(backgroundSyncCheck, 30000);
+
+// ---------- Mobile audio unlock ----------
+// Phones (especially iOS Safari) restrict audio/speech that isn't directly
+// tied to a tap — sound triggered from a background timer (like the
+// countdown or moving between habits) often gets silently blocked, even
+// though a tap-triggered sound (like pressing Start) plays fine. This is
+// exactly the "works sometimes, not others" pattern.
+// Fix: the moment the person taps ANYTHING for the first time, immediately
+// play a silent, near-instant sound and a blank speech utterance. Phones
+// treat this as "the user has allowed audio for this session," which then
+// also covers later sounds triggered by timers, not just taps.
+let audioUnlocked = false;
+function unlockAudioForIOS(){
+  if(audioUnlocked) return;
+  audioUnlocked = true;
+  try{
+    const silence = new Audio(
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+    );
+    silence.play().catch(()=>{});
+  }catch(e){}
+  try{
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+document.addEventListener('pointerdown', unlockAudioForIOS, { once: true });
 </script>
 </body>
 </html>
