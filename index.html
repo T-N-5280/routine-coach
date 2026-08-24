@@ -677,6 +677,13 @@ async function synthesizeAzure(text, locale){
 }
 
 let currentAzureAudio = null;
+// One single, reused <audio> element for all Azure playback, rather than a
+// fresh `new Audio()` per phrase. iOS Safari's autoplay "unlock" (see
+// unlockAudioForIOS below) is tied to a specific element, not a general
+// permission — creating a brand-new element for every phrase meant each
+// one needed its own separate unlock, which explains the "NotAllowedError"
+// happening inconsistently even after the first unlock.
+const sharedAzureAudioEl = new Audio();
 
 // ---------- Audio diagnostics ----------
 // A visible-in-app log of what actually happened with each voice attempt —
@@ -756,7 +763,8 @@ function speak(text, onend){
   synthesizeAzure(text, state.locale).then(url=>{
     if(finished) return; // watchdog already moved on — don't start late audio
     logAudioEvent(`Azure 获取成功，尝试播放 — "${shortText}"`);
-    const audio = new Audio(url);
+    const audio = sharedAzureAudioEl;
+    audio.src = url;
     currentAzureAudio = audio;
     if(onend){
       audio.onended = ()=>finish('azure');
@@ -1887,10 +1895,11 @@ function unlockAudioForIOS(){
   if(audioUnlocked) return;
   audioUnlocked = true;
   try{
-    const silence = new Audio(
-      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
-    );
-    silence.play().catch(()=>{});
+    // Unlock the SAME element speak() will reuse for every future Azure
+    // phrase — not a separate throwaway one. This is what makes the
+    // unlock actually carry over to later, timer-triggered playback.
+    sharedAzureAudioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    sharedAzureAudioEl.play().catch(()=>{});
   }catch(e){}
   try{
     const u = new SpeechSynthesisUtterance('');
