@@ -158,6 +158,8 @@
   <div class="card" id="historyCard"></div>
 
   <div class="card" id="timeStatsCard"></div>
+
+  <div class="card" id="audioDiagCard"></div>
 </div>
 
 <script>
@@ -293,7 +295,11 @@ const STR = {
   seqOverallDuration: { cn:"总时长", tw:"總時長" },
   seqAllocated:       { cn:"已分配", tw:"已分配" },
   seqRemaining:       { cn:"剩余", tw:"剩餘" },
-  noRoomForSubStep:   { cn:"没有剩余时间了，请先增加总时长或缩短其他动作。", tw:"沒有剩餘時間了，請先增加總時長或縮短其他動作。" }
+  noRoomForSubStep:   { cn:"没有剩余时间了，请先增加总时长或缩短其他动作。", tw:"沒有剩餘時間了，請先增加總時長或縮短其他動作。" },
+  audioDiagTitle: { cn:"语音诊断", tw:"語音診斷" },
+  audioDiagDesc:  { cn:"记录每次语音播报实际发生的情况，方便排查手机上声音不稳定的问题。", tw:"記錄每次語音播報實際發生的情況，方便排查手機上聲音不穩定的問題。" },
+  audioDiagEmpty: { cn:"还没有记录。", tw:"還沒有記錄。" },
+  audioDiagClear: { cn:"清除记录", tw:"清除記錄" }
 };
 function T(key){
   const entry = STR[key];
@@ -672,6 +678,41 @@ async function synthesizeAzure(text, locale){
 
 let currentAzureAudio = null;
 
+// ---------- Audio diagnostics ----------
+// A visible-in-app log of what actually happened with each voice attempt —
+// since debugging "audio doesn't play on my phone" by guessing has been
+// unproductive, this makes the real sequence of events checkable directly
+// on the device, no computer/console needed.
+function logAudioEvent(msg){
+  if(!state.audioLog) state.audioLog = [];
+  const time = new Date().toLocaleTimeString(state.locale==='tw' ? 'zh-TW' : 'zh-CN', {hour12:false});
+  state.audioLog.unshift({ time, msg });
+  if(state.audioLog.length > 25) state.audioLog.length = 25;
+  renderAudioDiagnosticsCard();
+}
+function renderAudioDiagnosticsCard(){
+  const card = document.getElementById('audioDiagCard');
+  if(!card) return;
+  const log = state.audioLog || [];
+  let html = `
+    <p class="section-title" style="margin:0 0 8px;">${T('audioDiagTitle')}</p>
+    <p class="small" style="margin:0 0 10px;">${T('audioDiagDesc')}</p>
+  `;
+  if(log.length === 0){
+    html += `<p class="small">${T('audioDiagEmpty')}</p>`;
+  } else {
+    html += `<div style="max-height:220px;overflow-y:auto;">` + log.map(e=>
+      `<p class="small" style="margin:2px 0;font-family:monospace;">[${e.time}] ${escapeHtml(e.msg)}</p>`
+    ).join('') + `</div>`;
+    html += `<button class="ghost" style="margin-top:8px;" onclick="clearAudioLog()">${T('audioDiagClear')}</button>`;
+  }
+  card.innerHTML = html;
+}
+function clearAudioLog(){
+  state.audioLog = [];
+  renderAudioDiagnosticsCard();
+}
+
 // Natural-voice speak for step announcements. Falls back to the local
 // browser voice automatically if the Azure call fails (bad connection,
 // CORS, quota, etc.) so a habit is never silently skipped.
@@ -686,6 +727,7 @@ let currentAzureAudio = null;
 // few seconds, we force it ourselves so the routine keeps moving no matter
 // what the browser silently swallowed.
 function speak(text, onend){
+  const shortText = text.length > 20 ? text.slice(0,20)+'…' : text;
   if(currentAzureAudio){
     try{ currentAzureAudio.pause(); }catch(e){}
     currentAzureAudio = null;
@@ -693,9 +735,10 @@ function speak(text, onend){
   try{ window.speechSynthesis.cancel(); }catch(e){}
 
   let finished = false;
-  const finish = ()=>{
+  const finish = (source)=>{
     if(finished) return;
     finished = true;
+    logAudioEvent(`完成（来源：${source}）— "${shortText}"`);
     if(onend) onend();
   };
 
@@ -703,38 +746,60 @@ function speak(text, onend){
     // Roughly scales with how long the line is, capped at 8s so it never
     // waits an unreasonable amount of time even for a long voice line.
     const watchdogMs = Math.min(8000, 1500 + text.length * 150);
-    setTimeout(finish, watchdogMs);
+    setTimeout(()=>{
+      if(!finished) logAudioEvent(`超时强制继续 — "${shortText}"`);
+      finish('watchdog');
+    }, watchdogMs);
   }
 
+  logAudioEvent(`尝试 Azure — "${shortText}"`);
   synthesizeAzure(text, state.locale).then(url=>{
     if(finished) return; // watchdog already moved on — don't start late audio
+    logAudioEvent(`Azure 获取成功，尝试播放 — "${shortText}"`);
     const audio = new Audio(url);
     currentAzureAudio = audio;
     if(onend){
-      audio.onended = finish;
-      audio.onerror = ()=>speakLocalFallback(text, finish, "Azure audio playback failed");
+      audio.onended = ()=>finish('azure');
+      audio.onerror = ()=>{
+        logAudioEvent(`Azure 播放出错，改用本地语音 — "${shortText}"`);
+        speakLocalFallback(text, ()=>finish('local-fallback'), null);
+      };
     }
     audio.play().catch(err=>{
-      if(!finished) speakLocalFallback(text, onend ? finish : null, "Azure audio play() rejected: " + err);
+      logAudioEvent(`Azure play() 被拒绝：${err} — "${shortText}"`);
+      if(!finished) speakLocalFallback(text, onend ? (()=>finish('local-fallback')) : null, null);
     });
   }).catch(err=>{
     if(finished) return;
-    speakLocalFallback(text, onend ? finish : null, "Azure request failed: " + err);
+    logAudioEvent(`Azure 请求失败：${err} — "${shortText}"`);
+    speakLocalFallback(text, onend ? (()=>finish('local-fallback')) : null, null);
   });
 }
 
 function speakLocalFallback(text, onend, reason){
+  const shortText = text.length > 20 ? text.slice(0,20)+'…' : text;
   if(reason) console.warn("[RoutineCoach] Azure TTS fallback —", reason);
+  logAudioEvent(`尝试本地语音 — "${shortText}"`);
   try{
     const u = new SpeechSynthesisUtterance(text);
     u.lang = state.locale === 'tw' ? 'zh-TW' : 'zh-CN';
     u.rate = 1.0;
     if(onend){
       u.onend = onend;
-      u.onerror = onend;
+      u.onerror = ()=>{ logAudioEvent(`本地语音出错 — "${shortText}"`); onend(); };
     }
     window.speechSynthesis.speak(u);
-  }catch(e){ if(onend) onend(); }
+    // Some mobile browsers accept the speak() call but never fire onend OR
+    // onerror if it was silently blocked — log what we can observe.
+    setTimeout(()=>{
+      if(!window.speechSynthesis.speaking && !window.speechSynthesis.pending){
+        logAudioEvent(`本地语音似乎从未真正开始播放 — "${shortText}"`);
+      }
+    }, 300);
+  }catch(e){
+    logAudioEvent(`本地语音调用异常：${e} — "${shortText}"`);
+    if(onend) onend();
+  }
 }
 
 // Speaks the remaining time as "X分Y秒" (minutes/seconds) every 5 seconds.
@@ -783,6 +848,7 @@ function renderChrome(){
   renderImportExportCard();
   renderHistoryCard();
   renderTimeStatsCard();
+  renderAudioDiagnosticsCard();
 }
 
 function renderSyncCard(){
