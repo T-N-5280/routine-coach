@@ -236,6 +236,7 @@ const STR = {
   syncPulled:    { cn:"已从云端拉取 ✓", tw:"已從雲端拉取 ✓" },
   syncPushed:    { cn:"已推送到云端 ✓", tw:"已推送到雲端 ✓" },
   syncNoCloudData:{ cn:"这个同步码在云端还没有数据", tw:"這個同步碼在雲端還沒有資料" },
+  pullOverwriteWarning: { cn:"你有尚未同步到云端的本地修改。现在从云端拉取会覆盖这些修改，确定要继续吗？", tw:"你有尚未同步到雲端的本機修改。現在從雲端拉取會覆蓋這些修改，確定要繼續嗎？" },
   syncActiveWith:{ cn:"当前同步码：", tw:"目前同步碼：" },
   noHabitsYet:   { cn:"还没有添加习惯，点击下方「编辑」开始添加。", tw:"還沒有新增習慣，點擊下方「編輯」開始新增。" },
   importExportTitle: { cn:"导入 / 导出", tw:"匯入 / 匯出" },
@@ -380,7 +381,11 @@ let state = {
   // budget has leftover time, it continues as generic/unstructured time
   // until you tap Next — rather than immediately jumping to the next habit.
   inSequenceTail: false,
-  sequenceTailTotal: 0
+  sequenceTailTotal: 0,
+  // true whenever a local edit hasn't yet been confirmed pushed to the
+  // cloud — blocks background auto-pull from overwriting it (see
+  // backgroundSyncCheck).
+  hasUnsyncedChanges: false
 };
 
 // Persistence: localStorage, since this file runs as a standalone hosted
@@ -445,9 +450,17 @@ async function pullFromCloud(){
 // bug fixed earlier for the duration fields). Only applies the pulled data
 // if it's actually different from what's already loaded, to avoid needless
 // re-renders.
+// Background auto-pull is skipped entirely whenever there are local edits
+// that haven't been confirmed pushed to the cloud yet — otherwise a
+// periodic check could silently pull an older cloud copy and overwrite
+// your newer, not-yet-synced local changes (a real risk on a slow push,
+// a debounce delay, or today's quota issue where pushes were failing
+// outright). This flag is set true the moment you make an edit, and only
+// cleared back to false once a push actually succeeds.
 async function backgroundSyncCheck(){
   if(!state.syncCode) return;
   if(state.running || state.editing) return;
+  if(state.hasUnsyncedChanges) return;
   const cloudData = await pullFromCloud();
   if(!cloudData) return;
   if(cloudData === JSON.stringify(state.routines)) return; // already up to date
@@ -472,9 +485,12 @@ async function pushToCloud(){
     });
     if(!res.ok) throw new Error("sync save failed: " + res.status);
     state.syncStatus = 'synced';
+    state.hasUnsyncedChanges = false; // confirmed safely in the cloud now
   }catch(e){
     console.warn("[RoutineCoach] cloud push failed —", e);
     state.syncStatus = 'error';
+    // stays marked as unsynced — background pulls will keep refusing to
+    // run until a push actually gets through, protecting this local edit
   }
   updateSyncBadge();
 }
@@ -553,9 +569,23 @@ function isStepToday(step){
 function todaysSteps(mode){
   return state.routines[mode].filter(isStepToday);
 }
+// Cloud pushes are debounced: rapid edits (like typing character-by-
+// character into a name field, or adjusting a slider repeatedly) get
+// batched into a single push a few seconds after you stop, rather than
+// firing one write per keystroke. This matters because Cloudflare's free
+// KV tier has a daily write limit — a heavy editing session hitting it on
+// every single edit could burn through that surprisingly fast. Explicit
+// manual pushes (the 推送 button) are unaffected and still happen instantly.
+let pushDebounceTimer = null;
+const PUSH_DEBOUNCE_MS = 3000;
+
 async function saveRoutines(){
   try{ await lsSet('routines', JSON.stringify(state.routines)); }catch(e){}
-  if(state.syncCode) pushToCloud(); // fire-and-forget cloud push on every edit
+  if(state.syncCode){
+    state.hasUnsyncedChanges = true;
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = setTimeout(()=>{ pushToCloud(); }, PUSH_DEBOUNCE_MS);
+  }
   recordHistorySnapshot();
 }
 
@@ -880,6 +910,9 @@ function renderSyncCard(){
 // with the Pull/Push buttons, so nothing gets silently overwritten.
 async function manualPull(){
   const statusEl = document.getElementById('syncActionStatus');
+  if(state.hasUnsyncedChanges && !confirm(T('pullOverwriteWarning'))){
+    return;
+  }
   if(statusEl) statusEl.textContent = T('syncing');
   const cloudData = await pullFromCloud();
   if(!cloudData){
@@ -890,6 +923,7 @@ async function manualPull(){
     state.routines = JSON.parse(cloudData);
     migrateRoutines();
     await lsSet('routines', cloudData);
+    state.hasUnsyncedChanges = false;
     renderRunner();
     renderEditor();
     if(statusEl) statusEl.textContent = T('syncPulled');
