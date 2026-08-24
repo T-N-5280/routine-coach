@@ -295,6 +295,7 @@ const STR = {
   seqOverallDuration: { cn:"总时长", tw:"總時長" },
   seqAllocated:       { cn:"已分配", tw:"已分配" },
   seqRemaining:       { cn:"剩余", tw:"剩餘" },
+  seqOverAllocated:   { cn:"子步骤总和已超过总时长，请调整", tw:"子步驟總和已超過總時長，請調整" },
   noRoomForSubStep:   { cn:"没有剩余时间了，请先增加总时长或缩短其他动作。", tw:"沒有剩餘時間了，請先增加總時長或縮短其他動作。" },
   audioDiagTitle: { cn:"语音诊断", tw:"語音診斷" },
   audioDiagDesc:  { cn:"记录每次语音播报实际发生的情况，方便排查手机上声音不稳定的问题。", tw:"記錄每次語音播報實際發生的情況，方便排查手機上聲音不穩定的問題。" },
@@ -1694,6 +1695,7 @@ function renderEditor(){
 function renderSeqEditor(i, s){
   const used = subStepsSum(s);
   const remaining = Math.max(0, (s.seconds||0) - used);
+  const overAllocated = used > (s.seconds||0);
   let subs = s.subSteps.map((m,mi)=>`
     <div class="blocksub">
       <div class="reorderbtns">
@@ -1727,7 +1729,7 @@ function renderSeqEditor(i, s){
       <p class="small" style="margin:0 0 8px;">${T('subStepsOrder')}</p>
       ${subs}
       <button type="button" style="margin:4px 0 10px;" onclick="addSubStep(${i})">${T('addSubStep')}</button>
-      <p class="seqtotal" id="seqTotal-${i}">${T('seqAllocated')} ${fmtMinSec(subStepsSum(s))} / ${T('seqOverallDuration')} ${fmtMinSec(s.seconds||0)}</p>
+      <p class="seqtotal" id="seqTotal-${i}" style="color:${overAllocated ? 'var(--warn)' : ''};">${T('seqAllocated')} ${fmtMinSec(used)} / ${T('seqOverallDuration')} ${fmtMinSec(s.seconds||0)}${overAllocated ? ` — ${T('seqOverAllocated')}` : ''}</p>
     </div>
   `;
 }
@@ -1760,15 +1762,24 @@ function updateSubStep(i, mi, field, value){
 }
 function updateSeqOverallSeconds(i, value){
   const step = state.routines[state.mode][i];
-  const used = subStepsSum(step);
-  let newVal = Math.max(5, parseInt(value)||5);
-  if(newVal < used) newVal = used; // can't shrink below what's already allocated to defined moves
+  // Freely editable — the "sub-steps can't exceed the total" rule is
+  // enforced on the SUB-STEP inputs instead (see updateSubStep). This
+  // field used to snap back up any time you typed something smaller than
+  // what your sub-steps already added up to, which made it feel broken —
+  // you just couldn't shrink the total at all once anything was allocated.
+  const newVal = Math.max(5, parseInt(value)||5);
   step.seconds = newVal;
   saveRoutines();
+  const used = subStepsSum(step);
   const inputEl = document.getElementById(`seqOverallInput-${i}`);
   if(inputEl) inputEl.value = step.seconds;
   const totalEl = document.getElementById(`seqTotal-${i}`);
-  if(totalEl) totalEl.textContent = `${T('seqAllocated')} ${fmtMinSec(used)} / ${T('seqOverallDuration')} ${fmtMinSec(step.seconds)}`;
+  if(totalEl){
+    const overAllocated = used > step.seconds;
+    totalEl.style.color = overAllocated ? 'var(--warn)' : '';
+    totalEl.textContent = `${T('seqAllocated')} ${fmtMinSec(used)} / ${T('seqOverallDuration')} ${fmtMinSec(step.seconds)}`
+      + (overAllocated ? ` — ${T('seqOverAllocated')}` : '');
+  }
 }
 function addSubStep(i){
   const step = state.routines[state.mode][i];
